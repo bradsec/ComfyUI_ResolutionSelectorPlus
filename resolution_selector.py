@@ -43,22 +43,6 @@ MODEL_RESOLUTIONS = {
 }
 
 
-def gcd(a, b):
-    """
-    Calculate greatest common divisor using Euclidean algorithm.
-
-    Args:
-        a (int): First number
-        b (int): Second number
-
-    Returns:
-        int: Greatest common divisor
-    """
-    while b != 0:
-        a, b = b, a % b
-    return a
-
-
 def calculate_aspect_ratio(width, height):
     """
     Calculate simplified aspect ratio from dimensions, using nearest common ratio.
@@ -381,17 +365,19 @@ class ResolutionSelector:
             final_custom_width = custom_width * custom_mult
             final_custom_height = custom_height * custom_mult
 
-            # Validate against model constraints (if not "All" model)
-            if model != "All":
-                self._validate_dimensions(model, final_custom_width, final_custom_height)
+            # Validate against model constraints. "All" still gets the generic
+            # 8-divisible / bounds check so the latent dimensions are not silently
+            # truncated by the //8 below.
+            self._validate_dimensions(model, final_custom_width, final_custom_height)
 
             # Generate custom latent with custom batch size
             custom_latent = self._generate_empty_latent(final_custom_width, final_custom_height, custom_batch, channels)
 
             return (width, height, latent, final_custom_width, final_custom_height, custom_latent)
         else:
-            # No custom dimensions, return zeros and minimal empty custom latent
-            custom_latent = self._generate_empty_latent(1, 1, 1, channels)
+            # No custom dimensions: return zeros and a minimal VALID latent (8x8 -> 1x1
+            # in latent space), never a zero-size [B,C,0,0] tensor.
+            custom_latent = self._generate_empty_latent(8, 8, 1, channels)
 
             return (width, height, latent, 0, 0, custom_latent)
 
@@ -407,10 +393,13 @@ class ResolutionSelector:
         Raises:
             ValueError: If dimensions violate model constraints
         """
-        if model not in MODEL_RESOLUTIONS:
-            return
+        if model in MODEL_RESOLUTIONS:
+            constraints = MODEL_RESOLUTIONS[model]["constraints"]
+        else:
+            # "All" or unknown model: enforce the generic latent requirement so
+            # dimensions divide cleanly by 8 and stay within sane bounds.
+            constraints = {"divisible_by": 8, "min": 64, "max": 4096}
 
-        constraints = MODEL_RESOLUTIONS[model]["constraints"]
         divisible_by = constraints.get("divisible_by", 8)
         min_dim = constraints.get("min", 64)
         max_dim = constraints.get("max", 4096)

@@ -4,6 +4,7 @@ Test script for ResolutionSelector enhancements
 """
 
 import sys
+import unittest
 sys.path.insert(0, '.')
 
 # Mock torch module for testing without ComfyUI environment
@@ -16,7 +17,6 @@ sys.modules['torch'] = MockTorch()
 sys.modules['comfy'] = type('module', (), {'model_management': None})()
 
 from resolution_selector import (
-    gcd,
     calculate_aspect_ratio,
     format_resolution,
     get_resolution_list,
@@ -25,14 +25,6 @@ from resolution_selector import (
     parse_resolution_string,
     MODEL_RESOLUTIONS
 )
-
-def test_gcd():
-    """Test GCD function"""
-    print("Testing GCD function:")
-    assert gcd(1920, 1080) == 120, "GCD of 1920, 1080 should be 120"
-    assert gcd(1024, 1024) == 1024, "GCD of 1024, 1024 should be 1024"
-    assert gcd(16, 9) == 1, "GCD of 16, 9 should be 1"
-    print("  ✓ GCD tests passed")
 
 def test_aspect_ratio():
     """Test aspect ratio calculation"""
@@ -148,13 +140,44 @@ def test_qwen_official_resolutions():
     print(f"  ✓ All {len(want)} resolutions present in Flux, Qwen Image, Z-Image")
 
 
+class TestResolutionSelector(unittest.TestCase):
+    """unittest wrapper so `python -m unittest` discovers these tests (R5).
+
+    Each method delegates to the existing function-style test; an assertion
+    failure inside propagates and fails the unittest case.
+    """
+
+    def test_aspect_ratio(self):
+        test_aspect_ratio()
+
+    def test_format_resolution(self):
+        test_format_resolution()
+
+    def test_parse_resolution(self):
+        test_parse_resolution()
+
+    def test_model_resolutions(self):
+        test_model_resolutions()
+
+    def test_new_resolutions(self):
+        test_new_resolutions()
+
+    def test_all_resolutions_unique(self):
+        test_all_resolutions_unique()
+
+    def test_latent_channels(self):
+        test_latent_channels()
+
+    def test_qwen_official_resolutions(self):
+        test_qwen_official_resolutions()
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("ResolutionSelector Enhancement Tests")
     print("=" * 60)
 
     try:
-        test_gcd()
         test_aspect_ratio()
         test_format_resolution()
         test_parse_resolution()
