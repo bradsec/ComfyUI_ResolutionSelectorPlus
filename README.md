@@ -1,4 +1,4 @@
-# Resolution Selector Plus for ComfyUI
+# Resolution Selector Plus - Custom node for ComfyUI
 
 Custom node for [ComfyUI](https://github.com/comfyanonymous/ComfyUI) providing easy resolution and empty latent selection for image generation workflows.
 
@@ -57,20 +57,25 @@ git clone https://github.com/bradsec/ComfyUI_ResolutionSelectorPlus.git
 **Basic preset with multiplier:**
 ```
 Resolution Selector Plus (model: SDXL, resolution: "1024x1024 (1:1 Square)", multiplier: 2x)
-  → width: 2048, height: 2048
-  → latent → KSampler
+  -> width: 2048, height: 2048
+  -> latent -> KSampler
 ```
 
 **Custom dimensions with independent multiplier:**
 ```
 Resolution Selector Plus (custom_width: 1024, custom_height: 768, custom_multiplier: 2x)
-  → custom_width: 2048, custom_height: 1536
-  → custom_latent → KSampler
+  -> custom_width: 2048, custom_height: 1536
+  -> custom_latent -> KSampler
 ```
 
 **Using "All" model option:**
 ```
 Resolution Selector Plus (model: All, resolution: "1920x1080 (16:9 Landscape)")
-  → Shows all 74 unique resolutions from all models
+  -> Shows all 74 unique resolutions from all models
 ```
 
+---
+
+## Support
+
+If you find this useful, please consider [starring the repo](https://github.com/bradsec/ComfyUI_ResolutionSelectorPlus). Stars help other people discover these nodes.
