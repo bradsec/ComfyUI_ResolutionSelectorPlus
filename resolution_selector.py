@@ -11,34 +11,34 @@ except ImportError:
 # Includes: model-optimized sizes + photo print (4x6, 5x7, 8x10) + digital/social + canvas art ratios
 MODEL_RESOLUTIONS = {
     "Flux": {
-        "square": [(512, 512), (768, 768), (1024, 1024), (1088, 1088), (1280, 1280), (1536, 1536), (1920, 1920), (2048, 2048)],
-        "portrait": [(688, 2048), (768, 1344), (832, 1216), (896, 1152), (928, 1664), (1024, 1536), (1024, 1792), (1024, 2048), (1088, 1920), (1152, 2048), (1200, 1792), (1360, 2048), (1456, 2048), (1536, 2048), (1616, 2048), (1632, 2048), (1712, 2048)],
-        "landscape": [(1280, 720), (1344, 768), (1216, 832), (1152, 896), (1536, 1024), (1664, 928), (1792, 1024), (1792, 1200), (1920, 1088), (2048, 688), (2048, 1024), (2048, 1152), (2048, 1360), (2048, 1456), (2048, 1536), (2048, 1616), (2048, 1632), (2048, 1712)],
-        "constraints": {"divisible_by": 16, "min": 256, "max": 2048}
+        "square": [(512, 512), (768, 768), (1024, 1024), (1088, 1088), (1280, 1280), (1328, 1328), (1536, 1536), (1920, 1920), (2048, 2048)],
+        "portrait": [(688, 2048), (768, 1344), (832, 1216), (896, 1152), (928, 1664), (1024, 1536), (1024, 1792), (1024, 2048), (1056, 1584), (1088, 1920), (1104, 1472), (1152, 2048), (1200, 1792), (1360, 2048), (1456, 2048), (1536, 2048), (1616, 2048), (1632, 2048), (1712, 2048)],
+        "landscape": [(1280, 720), (1344, 768), (1216, 832), (1152, 896), (1472, 1104), (1536, 1024), (1584, 1056), (1664, 928), (1792, 1024), (1792, 1200), (1920, 1088), (2048, 688), (2048, 1024), (2048, 1152), (2048, 1360), (2048, 1456), (2048, 1536), (2048, 1616), (2048, 1632), (2048, 1712)],
+        "constraints": {"divisible_by": 16, "min": 256, "max": 2048, "latent_channels": 16}
     },
     "Qwen Image": {
         "square": [(1024, 1024), (1080, 1080), (1280, 1280), (1328, 1328), (1536, 1536), (1920, 1920), (2048, 2048)],
         "portrait": [(680, 2048), (928, 1664), (1024, 1536), (1024, 2048), (1056, 1584), (1080, 1920), (1104, 1472), (1140, 1472), (1152, 2048), (1200, 1800), (1368, 2048), (1464, 2048), (1536, 2048), (1608, 2048), (1640, 2048), (1704, 2048)],
         "landscape": [(1280, 720), (1472, 1104), (1472, 1140), (1536, 1024), (1584, 1056), (1664, 928), (1800, 1200), (1920, 1080), (2048, 680), (2048, 1024), (2048, 1152), (2048, 1368), (2048, 1464), (2048, 1536), (2048, 1608), (2048, 1640), (2048, 1704)],
-        "constraints": {"divisible_by": 8, "min": 256, "max": 2048}
+        "constraints": {"divisible_by": 8, "min": 256, "max": 2048, "latent_channels": 16}
     },
     "Z-Image": {
-        "square": [(512, 512), (768, 768), (1024, 1024), (1080, 1080), (1280, 1280), (1536, 1536), (1920, 1920), (2048, 2048)],
-        "portrait": [(680, 2048), (720, 1280), (768, 1024), (1024, 2048), (1080, 1920), (1152, 2048), (1200, 1800), (1368, 2048), (1464, 2048), (1536, 2048), (1608, 2048), (1640, 2048), (1704, 2048)],
-        "landscape": [(1024, 768), (1280, 720), (1800, 1200), (1920, 1080), (2048, 680), (2048, 1024), (2048, 1152), (2048, 1368), (2048, 1464), (2048, 1536), (2048, 1608), (2048, 1640), (2048, 1704)],
-        "constraints": {"divisible_by": 8, "min": 256, "max": 2048}
+        "square": [(512, 512), (768, 768), (1024, 1024), (1080, 1080), (1280, 1280), (1328, 1328), (1536, 1536), (1920, 1920), (2048, 2048)],
+        "portrait": [(680, 2048), (720, 1280), (768, 1024), (928, 1664), (1024, 2048), (1056, 1584), (1080, 1920), (1104, 1472), (1152, 2048), (1200, 1800), (1368, 2048), (1464, 2048), (1536, 2048), (1608, 2048), (1640, 2048), (1704, 2048)],
+        "landscape": [(1024, 768), (1280, 720), (1472, 1104), (1584, 1056), (1664, 928), (1800, 1200), (1920, 1080), (2048, 680), (2048, 1024), (2048, 1152), (2048, 1368), (2048, 1464), (2048, 1536), (2048, 1608), (2048, 1640), (2048, 1704)],
+        "constraints": {"divisible_by": 8, "min": 256, "max": 2048, "latent_channels": 16}
     },
     "SD 1.5": {
         "square": [(512, 512), (768, 768), (1024, 1024), (1080, 1080), (1280, 1280), (1536, 1536)],
         "portrait": [(512, 768), (512, 682), (512, 1024), (680, 2048), (768, 1024), (768, 1344), (1024, 2048), (1080, 1920), (1200, 1800), (1368, 2048), (1464, 2048), (1536, 2048), (1608, 2048), (1640, 2048), (1704, 2048)],
         "landscape": [(768, 512), (1024, 512), (1024, 768), (1280, 720), (1344, 768), (1536, 512), (1800, 1200), (1920, 1080), (2048, 680), (2048, 1024), (2048, 1368), (2048, 1464), (2048, 1536), (2048, 1608), (2048, 1640), (2048, 1704)],
-        "constraints": {"divisible_by": 8, "min": 256, "max": 2048}
+        "constraints": {"divisible_by": 8, "min": 256, "max": 2048, "latent_channels": 4}
     },
     "SDXL": {
         "square": [(1024, 1024), (1080, 1080), (1280, 1280), (1536, 1536), (1920, 1920), (2048, 2048)],
         "portrait": [(640, 1536), (680, 2048), (768, 1344), (832, 1216), (896, 1152), (1024, 1536), (1024, 2048), (1080, 1920), (1152, 2048), (1200, 1800), (1368, 2048), (1464, 2048), (1536, 2048), (1608, 2048), (1640, 2048), (1704, 2048)],
         "landscape": [(1152, 896), (1216, 832), (1280, 720), (1344, 768), (1536, 640), (1536, 1024), (1800, 1200), (1920, 1080), (2048, 680), (2048, 1024), (2048, 1152), (2048, 1368), (2048, 1464), (2048, 1536), (2048, 1608), (2048, 1640), (2048, 1704)],
-        "constraints": {"divisible_by": 8, "min": 256, "max": 2048}
+        "constraints": {"divisible_by": 8, "min": 256, "max": 2048, "latent_channels": 4}
     }
 }
 
@@ -182,6 +182,29 @@ def get_default_resolution(model_name):
 
     # Fallback to 1024x1024
     return format_resolution(1024, 1024)
+
+
+def get_latent_channels(model_name):
+    """
+    Return the latent channel count for a model.
+
+    SD 1.5 and SDXL use 4-channel latents. Flux, Qwen Image, and Z-Image use
+    16-channel latents. A wrong channel count makes the LATENT output unusable
+    with that model's sampler.
+
+    For "All" (no specific model) this defaults to 4 for backward compatibility
+    with SD-based workflows; pick the specific model to get a 16-channel latent.
+
+    Args:
+        model_name (str): Model name, or "All".
+
+    Returns:
+        int: Latent channel count (4 or 16).
+    """
+    model_data = MODEL_RESOLUTIONS.get(model_name)
+    if model_data:
+        return model_data["constraints"].get("latent_channels", 4)
+    return 4
 
 
 def get_all_resolutions():
@@ -346,8 +369,11 @@ class ResolutionSelector:
         width *= multiplier
         height *= multiplier
 
+        # Channel count depends on the model (4 for SD1.5/SDXL, 16 for Flux/Qwen/Z-Image)
+        channels = get_latent_channels(model)
+
         # Generate latent for preset resolution with batch size
-        latent = self._generate_empty_latent(width, height, batch_size)
+        latent = self._generate_empty_latent(width, height, batch_size, channels)
 
         # Determine final custom dimensions
         if custom_width > 0 and custom_height > 0:
@@ -360,12 +386,12 @@ class ResolutionSelector:
                 self._validate_dimensions(model, final_custom_width, final_custom_height)
 
             # Generate custom latent with custom batch size
-            custom_latent = self._generate_empty_latent(final_custom_width, final_custom_height, custom_batch)
+            custom_latent = self._generate_empty_latent(final_custom_width, final_custom_height, custom_batch, channels)
 
             return (width, height, latent, final_custom_width, final_custom_height, custom_latent)
         else:
             # No custom dimensions, return zeros and minimal empty custom latent
-            custom_latent = self._generate_empty_latent(1, 1, 1)
+            custom_latent = self._generate_empty_latent(1, 1, 1, channels)
 
             return (width, height, latent, 0, 0, custom_latent)
 
@@ -413,7 +439,7 @@ class ResolutionSelector:
                 f"{model} requires height between {min_dim} and {max_dim}. Got {height}"
             )
 
-    def _generate_empty_latent(self, width, height, batch_size=1):
+    def _generate_empty_latent(self, width, height, batch_size=1, channels=4):
         """
         Generate empty latent tensor for VAE input.
 
@@ -421,6 +447,7 @@ class ResolutionSelector:
             width (int): Image width in pixels
             height (int): Image height in pixels
             batch_size (int): Number of latent samples (default: 1)
+            channels (int): Latent channel count (4 for SD1.5/SDXL, 16 for Flux/Qwen/Z-Image)
 
         Returns:
             dict: LATENT dict with 'samples' key containing empty tensor
@@ -429,9 +456,9 @@ class ResolutionSelector:
         latent_width = width // 8
         latent_height = height // 8
 
-        # Shape: [batch_size, channels=4, height//8, width//8]
+        # Shape: [batch_size, channels, height//8, width//8]
         latent_tensor = torch.zeros(
-            [batch_size, 4, latent_height, latent_width],
+            [batch_size, channels, latent_height, latent_width],
             device=self.device
         )
 

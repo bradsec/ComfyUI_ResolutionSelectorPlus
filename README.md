@@ -8,8 +8,10 @@ Custom node for [ComfyUI](https://github.com/comfyanonymous/ComfyUI) providing e
 
 ### Resolution Selector
 - **Model-optimised resolution presets** (portrait, landscape, square)
-- **Empty latent output** for direct KSampler connection
+- **Empty latent output** for direct KSampler connection, with the correct latent channel count per model (4 for SD 1.5 / SDXL, 16 for Flux / Qwen Image / Z-Image)
 - **Custom width/height inputs** with **independent multiplier and latent**
+
+Note: with model set to "All" the latent uses 4 channels. Pick the specific model (Flux, Qwen Image, Z-Image) to get a 16-channel latent for that model's sampler.
 
 ## Installation
 

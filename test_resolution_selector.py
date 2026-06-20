@@ -21,6 +21,7 @@ from resolution_selector import (
     format_resolution,
     get_resolution_list,
     get_all_resolutions,
+    get_latent_channels,
     parse_resolution_string,
     MODEL_RESOLUTIONS
 )
@@ -124,6 +125,29 @@ def test_all_resolutions_unique():
     assert len(dimensions) == len(unique_dimensions), "Should have no duplicate dimensions"
     print(f"  ✓ All {len(all_res)} resolutions are unique")
 
+def test_latent_channels():
+    """R1: latent channel count must match the model (4 SD-based, 16 Flux/Qwen/Z-Image)"""
+    print("\nTesting latent channel mapping:")
+    expected = {"Flux": 16, "Qwen Image": 16, "Z-Image": 16, "SD 1.5": 4, "SDXL": 4, "All": 4}
+    for model, channels in expected.items():
+        got = get_latent_channels(model)
+        assert got == channels, f"{model}: expected {channels} channels, got {got}"
+    print(f"  ✓ Channel mapping correct: {expected}")
+
+
+def test_qwen_official_resolutions():
+    """Official Qwen-Image sizes must be present in all 16-channel models"""
+    print("\nTesting official Qwen resolutions in 16-channel models:")
+    want = [(1328, 1328), (1664, 928), (928, 1664), (1472, 1104),
+            (1104, 1472), (1584, 1056), (1056, 1584)]
+    for model in ["Flux", "Qwen Image", "Z-Image"]:
+        resolutions = get_resolution_list(model)
+        for w, h in want:
+            s = format_resolution(w, h)
+            assert s in resolutions, f"{model} missing {w}x{h}"
+    print(f"  ✓ All {len(want)} resolutions present in Flux, Qwen Image, Z-Image")
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("ResolutionSelector Enhancement Tests")
@@ -137,6 +161,8 @@ if __name__ == "__main__":
         test_model_resolutions()
         test_new_resolutions()
         test_all_resolutions_unique()
+        test_latent_channels()
+        test_qwen_official_resolutions()
 
         print("\n" + "=" * 60)
         print("✓ ALL TESTS PASSED!")
