@@ -247,6 +247,26 @@ def parse_resolution_string(resolution_str):
         raise ValueError(f"Invalid resolution format: {resolution_str}")
 
 
+# Tooltips (shared by both API wrappers).
+TIP_MODEL  = "Image model. Filters the resolution presets to that model's recommended sizes. 'All' shows every preset."
+TIP_RESOLUTION = "Preset resolution. The list filters to the selected model."
+TIP_MULT   = "Multiplies the preset width and height (1x to 4x)."
+TIP_BATCH  = "Number of latent samples in the preset latent batch."
+TIP_CW     = "Custom width in pixels. 0 disables the custom outputs. Must satisfy the model's divisibility and bounds."
+TIP_CH     = "Custom height in pixels. 0 disables the custom outputs. Must satisfy the model's divisibility and bounds."
+TIP_CMULT  = "Multiplies the custom width and height (1x to 4x)."
+TIP_CBATCH = "Number of latent samples in the custom latent batch."
+
+OUTPUT_TIPS = {
+    "width": "Preset width in pixels after multiplier.",
+    "height": "Preset height in pixels after multiplier.",
+    "latent": "Empty latent for the preset resolution.",
+    "custom_width": "Custom width after multiplier, or 0 when custom is disabled.",
+    "custom_height": "Custom height after multiplier, or 0 when custom is disabled.",
+    "custom_latent": "Empty latent for the custom resolution.",
+}
+
+
 class ResolutionSelector:
     """
     Enhanced resolution selector supporting multiple image generation models.
@@ -276,20 +296,24 @@ class ResolutionSelector:
         return {
             "required": {
                 "model": (model_list, {
-                    "default": "SDXL"
+                    "default": "SDXL",
+                    "tooltip": TIP_MODEL,
                 }),
                 "resolution": (all_resolutions, {
-                    "default": "1024x1024 (1:1 Square)"
+                    "default": "1024x1024 (1:1 Square)",
+                    "tooltip": TIP_RESOLUTION,
                 }),
                 "resolution_multiplier": (["1x", "2x", "3x", "4x"], {
-                    "default": "1x"
+                    "default": "1x",
+                    "tooltip": TIP_MULT,
                 }),
                 "batch_size": ("INT", {
                     "default": 1,
                     "min": 1,
                     "max": 64,
                     "step": 1,
-                    "display": "number"
+                    "display": "number",
+                    "tooltip": TIP_BATCH,
                 }),
             },
             "optional": {
@@ -298,24 +322,28 @@ class ResolutionSelector:
                     "min": 0,
                     "max": 4096,
                     "step": 8,
-                    "display": "number"
+                    "display": "number",
+                    "tooltip": TIP_CW,
                 }),
                 "custom_height": ("INT", {
                     "default": 0,
                     "min": 0,
                     "max": 4096,
                     "step": 8,
-                    "display": "number"
+                    "display": "number",
+                    "tooltip": TIP_CH,
                 }),
                 "custom_multiplier": (["1x", "2x", "3x", "4x"], {
-                    "default": "1x"
+                    "default": "1x",
+                    "tooltip": TIP_CMULT,
                 }),
                 "custom_batch": ("INT", {
                     "default": 1,
                     "min": 1,
                     "max": 64,
                     "step": 1,
-                    "display": "number"
+                    "display": "number",
+                    "tooltip": TIP_CBATCH,
                 }),
             }
         }
@@ -463,3 +491,61 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "ResolutionSelectorPlus": "Resolution Selector Plus",
 }
+
+
+# -- V3 node (import-guarded comfy_api schema) ---------------------------------
+# Thin adapter: execute delegates to the V1 class so the logic is never forked.
+
+try:
+    from comfy_api.v0_0_2 import io, ComfyExtension
+
+    class ResolutionSelectorPlusV3(io.ComfyNode):
+        @classmethod
+        def define_schema(cls) -> io.Schema:
+            model_list = ["All"] + list(MODEL_RESOLUTIONS.keys())
+            all_resolutions = get_all_resolutions()
+            mult = ["1x", "2x", "3x", "4x"]
+            return io.Schema(
+                node_id="ResolutionSelectorPlus",
+                display_name="Resolution Selector Plus",
+                category="utils",
+                description="Model-aware resolution presets, custom dimensions, and empty latent output.",
+                inputs=[
+                    io.Combo.Input("model", options=model_list, default="SDXL", tooltip=TIP_MODEL),
+                    io.Combo.Input("resolution", options=all_resolutions,
+                                   default="1024x1024 (1:1 Square)", tooltip=TIP_RESOLUTION),
+                    io.Combo.Input("resolution_multiplier", options=mult, default="1x", tooltip=TIP_MULT),
+                    io.Int.Input("batch_size", default=1, min=1, max=64, step=1, tooltip=TIP_BATCH),
+                    io.Int.Input("custom_width", default=0, min=0, max=4096, step=8, optional=True, tooltip=TIP_CW),
+                    io.Int.Input("custom_height", default=0, min=0, max=4096, step=8, optional=True, tooltip=TIP_CH),
+                    io.Combo.Input("custom_multiplier", options=mult, default="1x", optional=True, tooltip=TIP_CMULT),
+                    io.Int.Input("custom_batch", default=1, min=1, max=64, step=1, optional=True, tooltip=TIP_CBATCH),
+                ],
+                outputs=[
+                    io.Int.Output(id="width", display_name="width", tooltip=OUTPUT_TIPS["width"]),
+                    io.Int.Output(id="height", display_name="height", tooltip=OUTPUT_TIPS["height"]),
+                    io.Latent.Output(id="latent", display_name="latent", tooltip=OUTPUT_TIPS["latent"]),
+                    io.Int.Output(id="custom_width", display_name="custom_width", tooltip=OUTPUT_TIPS["custom_width"]),
+                    io.Int.Output(id="custom_height", display_name="custom_height", tooltip=OUTPUT_TIPS["custom_height"]),
+                    io.Latent.Output(id="custom_latent", display_name="custom_latent", tooltip=OUTPUT_TIPS["custom_latent"]),
+                ],
+            )
+
+        @classmethod
+        def execute(cls, model, resolution, resolution_multiplier="1x", batch_size=1,
+                    custom_width=0, custom_height=0, custom_multiplier="1x", custom_batch=1) -> io.NodeOutput:
+            result = ResolutionSelector().select_resolution(
+                model, resolution, resolution_multiplier, batch_size,
+                custom_width, custom_height, custom_multiplier, custom_batch)
+            return io.NodeOutput(*result)
+
+    class ResolutionSelectorPlusExtension(ComfyExtension):
+        async def get_node_list(self):
+            return [ResolutionSelectorPlusV3]
+
+    async def comfy_entrypoint() -> "ResolutionSelectorPlusExtension":
+        return ResolutionSelectorPlusExtension()
+
+except ImportError:
+    # Older ComfyUI without comfy_api: V1 mappings above are the only path.
+    pass
