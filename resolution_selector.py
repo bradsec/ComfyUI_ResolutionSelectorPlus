@@ -454,10 +454,12 @@ class ResolutionSelector:
         return {"samples": latent_tensor}
 
 
+# node_id must be unique: ComfyUI core ships a built-in "ResolutionSelector"
+# (comfy_extras/nodes_resolution.py), so this pack registers under a distinct id.
 NODE_CLASS_MAPPINGS = {
-    "ResolutionSelector": ResolutionSelector,
+    "ResolutionSelectorPlus": ResolutionSelector,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ResolutionSelector": "Resolution Selector Plus",
+    "ResolutionSelectorPlus": "Resolution Selector Plus",
 }

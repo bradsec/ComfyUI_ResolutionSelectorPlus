@@ -1,7 +1,7 @@
 [project]
 name = "comfyui_resolutionselectorplus"
 description = "Custom node for ComfyUI providing easy resolution and empty latent selection for image generation workflows."
-version = "2.1.0"
+version = "2.1.1"
 license = {file = "LICENSE"}
 
 [project.urls]

@@ -167,10 +167,10 @@ function getDefaultResolution(model) {
 }
 
 app.registerExtension({
-    name: "ResolutionSelector.DynamicDropdown",
+    name: "ResolutionSelectorPlus.DynamicDropdown",
 
     async nodeCreated(node) {
-        if (node.comfyClass !== "ResolutionSelector") return;
+        if (node.comfyClass !== "ResolutionSelectorPlus") return;
 
         // Set wider default node width to prevent text cutoff
         node.setSize([400, node.size[1]]);
@@ -220,7 +220,7 @@ app.registerExtension({
     },
 
     async loadedGraphNode(node) {
-        if (node.comfyClass !== "ResolutionSelector") return;
+        if (node.comfyClass !== "ResolutionSelectorPlus") return;
 
         const modelWidget = node.widgets.find(w => w.name === "model");
         if (modelWidget) {
