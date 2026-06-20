@@ -15,6 +15,12 @@ Note: with model set to "All" the latent uses 4 channels. Pick the specific mode
 
 ## Installation
 
+### ComfyUI Manager (recommended)
+
+In ComfyUI, open **Manager > Custom Nodes Manager**, search for **ComfyUI_ResolutionSelectorPlus**, click **Install**, then restart ComfyUI.
+
+### Manual install
+
 ```bash
 # Change to the directory you installed ComfyUI
 cd pathTo/ComfyUI
