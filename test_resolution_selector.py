@@ -16,7 +16,7 @@ class MockTorch:
 sys.modules['torch'] = MockTorch()
 sys.modules['comfy'] = type('module', (), {'model_management': None})()
 
-from resolution_selector import (
+from nodes import (
     calculate_aspect_ratio,
     format_resolution,
     get_resolution_list,
