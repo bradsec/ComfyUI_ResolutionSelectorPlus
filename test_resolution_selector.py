@@ -140,6 +140,39 @@ def test_qwen_official_resolutions():
     print(f"  ✓ All {len(want)} resolutions present in Flux, Qwen Image, Z-Image")
 
 
+def test_presets_satisfy_constraints():
+    """Every preset must satisfy its own model's divisibility/min/max, or the
+    reported width/height will not match the generated latent dimensions."""
+    print("\nTesting preset dimensions against model constraints:")
+    for model, data in MODEL_RESOLUTIONS.items():
+        c = data["constraints"]
+        for category in ("square", "portrait", "landscape"):
+            for w, h in data[category]:
+                assert w % c["divisible_by"] == 0 and h % c["divisible_by"] == 0, \
+                    f"{model} {w}x{h} not divisible by {c['divisible_by']}"
+                assert c["min"] <= w <= c["max"] and c["min"] <= h <= c["max"], \
+                    f"{model} {w}x{h} outside {c['min']}-{c['max']}"
+    print("  ✓ All presets satisfy their model constraints")
+
+
+def test_js_table_matches_python():
+    """js/resolution_selector.js hand-mirrors MODEL_RESOLUTIONS; catch drift."""
+    print("\nTesting JS resolution table matches Python:")
+    import json, os, re
+    js_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "js", "resolution_selector.js")
+    with open(js_path, encoding="utf-8") as f:
+        src = f.read()
+    match = re.search(r"const MODEL_RESOLUTIONS = (\{.*?\n\});", src, re.DOTALL)
+    assert match, "MODEL_RESOLUTIONS table not found in resolution_selector.js"
+    js_table = json.loads(re.sub(r",(\s*[}\]])", r"\1", match.group(1)))
+    py_table = {model: {cat: [list(p) for p in data[cat]]
+                        for cat in ("square", "portrait", "landscape")}
+                for model, data in MODEL_RESOLUTIONS.items()}
+    assert js_table == py_table, "JS MODEL_RESOLUTIONS differs from nodes.py"
+    print("  ✓ JS table in sync with nodes.py")
+
+
 class TestResolutionSelector(unittest.TestCase):
     """unittest wrapper so `python -m unittest` discovers these tests (R5).
 
@@ -171,6 +204,12 @@ class TestResolutionSelector(unittest.TestCase):
     def test_qwen_official_resolutions(self):
         test_qwen_official_resolutions()
 
+    def test_presets_satisfy_constraints(self):
+        test_presets_satisfy_constraints()
+
+    def test_js_table_matches_python(self):
+        test_js_table_matches_python()
+
 
 if __name__ == "__main__":
     print("=" * 60)
@@ -186,6 +225,8 @@ if __name__ == "__main__":
         test_all_resolutions_unique()
         test_latent_channels()
         test_qwen_official_resolutions()
+        test_presets_satisfy_constraints()
+        test_js_table_matches_python()
 
         print("\n" + "=" * 60)
         print("✓ ALL TESTS PASSED!")
