@@ -1,3 +1,4 @@
+import math
 import torch
 
 try:
@@ -300,7 +301,7 @@ class ResolutionSelector:
                     "tooltip": TIP_MODEL,
                 }),
                 "resolution": (all_resolutions, {
-                    "default": "1024x1024 (1:1 Square)",
+                    "default": format_resolution(1024, 1024),
                     "tooltip": TIP_RESOLUTION,
                 }),
                 "resolution_multiplier": (["1x", "2x", "3x", "4x"], {
@@ -489,14 +490,140 @@ class ResolutionSelector:
         return {"samples": latent_tensor}
 
 
+# Format: comfy.latent_formats class, fallback channels/downscale/rank, best pixel multiple.
+# Sources: comfy/latent_formats.py:6-13,25,37,123-124,165-166,197-199,729-732,891-894,965-968.
+# Patch sources: comfy/model_detection.py:290-306 (Flux.1/Flux.2),760 (Wan21);
+# comfy/model_detection.py:300,595,871 (Chroma, Z-Image, HiDream),760 (Wan21).
+# SD3: patch size 2 (diffusers SD3Transformer2DModel config; ComfyUI reads it from the checkpoint, comfy/model_detection.py:57).
+# Qwen-Image 2.1, HunyuanImage 2.1:
+# checkpoint patch size is unverified; best multiple falls back to downscale.
+V2_MODELS = {
+    "SD 1.5": ("SD15", (4, 8, 4), 8),
+    "SDXL": ("SDXL", (4, 8, 4), 8),
+    "SD3": ("SD3", (16, 8, 4), 16),
+    "Flux.1": ("Flux", (16, 8, 4), 16),
+    "Flux.2": ("Flux2", (128, 16, 4), 16),
+    "Chroma": ("Flux", (16, 8, 4), 16),
+    "Z-Image": ("Flux", (16, 8, 4), 16),
+    "Qwen-Image": ("Wan21", (16, 8, 5), 16),
+    "Qwen-Image 2.1": ("QwenImage21", (64, 16, 4), 16),
+    "HiDream": ("Flux", (16, 8, 4), 16),
+    "HunyuanImage 2.1": ("HunyuanImage21", (64, 32, 4), 32),
+    "Other (4ch /8)": ("SD15", (4, 8, 4), 8),
+}
+
+
+def load_v2_model_formats():
+    try:
+        import comfy.latent_formats as latent_formats
+    except ImportError:
+        latent_formats = None
+    formats = {}
+    for model, (class_name, fallback, _) in V2_MODELS.items():
+        latent = getattr(latent_formats, class_name, None) if latent_formats else None
+        formats[model] = (latent.latent_channels, latent.spacial_downscale_ratio,
+                          latent.latent_dimensions + 2) if latent else fallback
+    return formats
+
+
+V2_MODEL_FORMATS = load_v2_model_formats()
+V2_RATIOS = ("1:1", "5:4", "4:3", "3:2", "16:10", "16:9", "2:1", "21:9", "12:5", "3:1",
+             "3:4", "2:3", "5:8", "9:16", "1:2", "5:12", "1:3")
+V2_MEGAPIXELS = ("0.25", "0.5", "1.0", "1.5", "2.0", "4.0")
+V2_MULTIPLES = (8, 16, 32, 64)
+
+
+def get_v2_resolutions(aspect_ratio, megapixels):
+    if aspect_ratio not in V2_RATIOS or megapixels not in V2_MEGAPIXELS:
+        raise ValueError("Unsupported aspect ratio or megapixels")
+    numerator, denominator = map(int, aspect_ratio.split(":"))
+    ratio = numerator / denominator
+    choices = []
+    for scale in (0.9, 1.0, 1.1):
+        pixels = float(megapixels) * 1000000 * scale
+        for snap in (64, 32, 16, 8):
+            width = max(64, int(math.sqrt(pixels * ratio) / snap + 0.5) * snap)
+            height = max(64, int(math.sqrt(pixels / ratio) / snap + 0.5) * snap)
+            if calculate_aspect_ratio(width, height) == aspect_ratio:
+                label = f"{width}x{height} ({aspect_ratio})"
+                if label not in choices:
+                    choices.append(label)
+                break
+    return choices
+
+
+class ResolutionSelectorV2(ResolutionSelector):
+    @classmethod
+    def INPUT_TYPES(cls):
+        all_choices = list(dict.fromkeys(label for ratio in V2_RATIOS for mp in V2_MEGAPIXELS
+                                         for label in get_v2_resolutions(ratio, mp)))
+        required = {}
+        optional = {}
+        for slot in range(1, 5):
+            target = required if slot == 1 else optional
+            target[f"res{slot}_model"] = (list(V2_MODELS), {"default": "SDXL"})
+            target[f"res{slot}_aspect_ratio"] = (list(V2_RATIOS), {"default": "1:1"})
+            target[f"res{slot}_megapixels"] = (list(V2_MEGAPIXELS), {"default": "1.0"})
+            target[f"res{slot}_resolution"] = ((all_choices if slot == 1 else ["none"] + all_choices),
+                                               {"default": get_v2_resolutions("1:1", "1.0")[0] if slot == 1 else "none"})
+            target[f"res{slot}_multiple"] = (list(V2_MULTIPLES), {"default": V2_MODELS["SDXL"][2]})
+        return {"required": required, "optional": optional}
+
+    RETURN_TYPES = ("INT", "INT", "LATENT") * 4
+    RETURN_NAMES = tuple(f"res{slot}_{kind}" for slot in range(1, 5)
+                         for kind in ("width", "height", "latent"))
+    FUNCTION = "select_resolutions"
+    CATEGORY = "utils"
+
+    def select_resolutions(self, res1_model, res1_aspect_ratio, res1_megapixels, res1_resolution, res1_multiple,
+                           res2_model=None, res2_aspect_ratio="1:1", res2_megapixels="1.0", res2_resolution="none", res2_multiple=8,
+                           res3_model=None, res3_aspect_ratio="1:1", res3_megapixels="1.0", res3_resolution="none", res3_multiple=8,
+                           res4_model=None, res4_aspect_ratio="1:1", res4_megapixels="1.0", res4_resolution="none", res4_multiple=8):
+        slots = ((res1_model, res1_aspect_ratio, res1_megapixels, res1_resolution, res1_multiple),
+                 (res2_model, res2_aspect_ratio, res2_megapixels, res2_resolution, res2_multiple),
+                 (res3_model, res3_aspect_ratio, res3_megapixels, res3_resolution, res3_multiple),
+                 (res4_model, res4_aspect_ratio, res4_megapixels, res4_resolution, res4_multiple))
+        result = []
+        inactive = False
+        warned = False
+        for model, ratio, mp, label, multiple in slots:
+            if label == "none":
+                inactive = True
+                result.extend((0, 0, None))
+                continue
+            if inactive or label not in get_v2_resolutions(ratio, mp):
+                raise ValueError("Resolution does not match its slot or a previous slot is inactive")
+            model = model or "SDXL"
+            if multiple not in V2_MULTIPLES or model not in V2_MODELS:
+                raise ValueError("Unsupported multiple or model")
+            channels, downscale, rank = V2_MODEL_FORMATS[model]
+            if multiple < downscale and not warned:
+                print(f"Resolution Selector Plus v2: multiple {multiple} below latent downscale {downscale}; latent size floors")
+                warned = True
+            width, height = parse_resolution_string(label)
+            width = max(multiple, ((width + multiple // 2) // multiple) * multiple)
+            height = max(multiple, ((height + multiple // 2) // multiple) * multiple)
+            shape = [1, channels, height // downscale, width // downscale]
+            if rank == 5:
+                shape.insert(2, 1)
+            kwargs = {"device": self.device}
+            if model == "SD3" and COMFY_AVAILABLE:
+                kwargs["dtype"] = comfy.model_management.intermediate_dtype()
+            latent = {"samples": torch.zeros(shape, **kwargs), "downscale_ratio_spacial": downscale}
+            result.extend((width, height, latent))
+        return tuple(result)
+
+
 # node_id must be unique: ComfyUI core ships a built-in "ResolutionSelector"
 # (comfy_extras/nodes_resolution.py), so this pack registers under a distinct id.
 NODE_CLASS_MAPPINGS = {
     "ResolutionSelectorPlus": ResolutionSelector,
+    "ResolutionSelectorPlusV2": ResolutionSelectorV2,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ResolutionSelectorPlus": "Resolution Selector Plus",
+    "ResolutionSelectorPlus": "Resolution Selector Plus (deprecated)",
+    "ResolutionSelectorPlusV2": "Resolution Selector Plus v2",
 }
 
 
@@ -514,13 +641,14 @@ try:
             mult = ["1x", "2x", "3x", "4x"]
             return io.Schema(
                 node_id="ResolutionSelectorPlus",
-                display_name="Resolution Selector Plus",
+                display_name="Resolution Selector Plus (deprecated)",
+                is_deprecated=True,
                 category="utils",
                 description="Model-aware resolution presets, custom dimensions, and empty latent output.",
                 inputs=[
                     io.Combo.Input("model", options=model_list, default="SDXL", tooltip=TIP_MODEL),
                     io.Combo.Input("resolution", options=all_resolutions,
-                                   default="1024x1024 (1:1 Square)", tooltip=TIP_RESOLUTION),
+                                   default=format_resolution(1024, 1024), tooltip=TIP_RESOLUTION),
                     io.Combo.Input("resolution_multiplier", options=mult, default="1x", tooltip=TIP_MULT),
                     io.Int.Input("batch_size", default=1, min=1, max=64, step=1, tooltip=TIP_BATCH),
                     io.Int.Input("custom_width", default=0, min=0, max=4096, step=8, optional=True, tooltip=TIP_CW),
@@ -546,9 +674,32 @@ try:
                 custom_width, custom_height, custom_multiplier, custom_batch)
             return io.NodeOutput(*result)
 
+    class ResolutionSelectorPlusV2V3(io.ComfyNode):
+        @classmethod
+        def define_schema(cls) -> io.Schema:
+            source = ResolutionSelectorV2.INPUT_TYPES()
+            inputs = []
+            for group in ("required", "optional"):
+                for name, (choices, settings) in source[group].items():
+                    inputs.append(io.Combo.Input(name, options=choices, default=settings["default"],
+                                                 display_name=name.replace("_", " ").replace("res", "Res ", 1),
+                                                 optional=group == "optional"))
+            outputs = []
+            for name, kind in zip(ResolutionSelectorV2.RETURN_NAMES, ResolutionSelectorV2.RETURN_TYPES):
+                output = io.Latent.Output if kind == "LATENT" else io.Int.Output
+                outputs.append(output(id=name, display_name=name))
+            return io.Schema(node_id="ResolutionSelectorPlusV2", display_name="Resolution Selector Plus v2",
+                             category="utils", inputs=inputs, outputs=outputs)
+
+        @classmethod
+        def execute(cls, res1_model, res1_aspect_ratio, res1_megapixels, res1_resolution, res1_multiple,
+                    **optional) -> io.NodeOutput:
+            return io.NodeOutput(*ResolutionSelectorV2().select_resolutions(
+                res1_model, res1_aspect_ratio, res1_megapixels, res1_resolution, res1_multiple, **optional))
+
     class ResolutionSelectorPlusExtension(ComfyExtension):
         async def get_node_list(self):
-            return [ResolutionSelectorPlusV3]
+            return [ResolutionSelectorPlusV3, ResolutionSelectorPlusV2V3]
 
     async def comfy_entrypoint() -> "ResolutionSelectorPlusExtension":
         return ResolutionSelectorPlusExtension()
