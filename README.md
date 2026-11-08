@@ -9,6 +9,7 @@ Custom node for [ComfyUI](https://github.com/comfyanonymous/ComfyUI) providing e
 - **Resolution Selector Plus:** pick a named aspect ratio and megapixels, then choose from matching resolutions.
 - **Up to four resolution slots:** each active slot has width, height, and empty latent outputs.
 - **Per-slot model and rounding multiple:** choose a discovered ComfyUI image model and pixel multiple independently for each slot.
+- **Optional KJNodes Set nodes:** when [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) is installed, the node can create and sync a Set node for each output, so Get nodes can reach `res1_width`, `res1_latent` and the rest anywhere in the workflow.
 - **Resolution Selector Plus (Legacy):** existing model presets and custom dimensions remain available for saved workflows.
 
 ## Installation
@@ -106,8 +107,6 @@ Maintenance: a model is listed when its ComfyUI class has a 2D latent, or is in 
 Set `res2_resolution` beyond `none` to reveal its output triple and the next selector. Repeat through res4. Setting an earlier slot to `none` clears later slots and their links. Saved workflows retain active slot selections and links.
 Older workflows with bare aspect ratios migrate to named values on load. If saved widget values are invalid or shifted, the frontend restores defaults and warns once. API prompts with bare ratios such as `16:9` also validate. Python still rejects unknown ratios.
 
-When KJNodes is installed, right-click Resolution Selector Plus and select **Auto Set nodes (KJNodes): Off** to turn it on. This optional setting creates one collapsed SetNode beside each active output and removes managed SetNodes when their slot deactivates or the setting is turned off. **Set node prefix...** adds an optional prefix, with an underscore inserted when needed. For example, `portrait` names the first SetNode `portrait_res1_width`. Existing SetNode names take precedence; managed names get a numeric suffix on a clash. Both settings and managed node IDs save with the workflow. Workflows saved with these SetNodes show missing nodes if KJNodes is later uninstalled.
-
 | Slot | Outputs |
 | --- | --- |
 | 1 | `res1_width` (INT), `res1_height` (INT), `res1_latent` (LATENT) |
@@ -116,6 +115,25 @@ When KJNodes is installed, right-click Resolution Selector Plus and select **Aut
 | 4 | `res4_width` (INT), `res4_height` (INT), `res4_latent` (LATENT) |
 
 Outputs are named `res1_width`, `res1_height`, `res1_latent`, through `res4_latent`.
+
+### Auto Set nodes (KJNodes)
+
+Requires [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes). Without it, the menu items below do not appear and the node behaves as before. The setting is off by default.
+
+How Set and Get nodes work: KJNodes Set and Get nodes exist only in the ComfyUI frontend and are not sent to the server. A Set node takes a value and gives it a name. A Get node with the same name outputs that value. When you queue a prompt, each Get node is replaced by a direct link to whatever feeds the matching Set node. Width, height, and latent values therefore reach their targets exactly as if you had drawn the links yourself, with no extra execution step. Set and Get nodes avoid long links across a large workflow.
+
+1. Right-click Resolution Selector Plus and select **Auto Set nodes (KJNodes): Off**. The label changes to **On**.
+2. The node adds one collapsed Set node beside each active output, named after the output: `res1_width`, `res1_height`, `res1_latent`, and so on.
+3. Add a KJNodes **Get** node anywhere in the workflow and pick a name, for example `res1_latent`, to use that value without a link.
+
+Behavior:
+
+- Activating a slot adds its three Set nodes. Setting a slot to `none` removes them.
+- Selecting **Auto Set nodes (KJNodes): On** turns the setting off and removes every Set node this node created. Set nodes you added yourself are never touched.
+- **Set node prefix...** adds a prefix to the names, with an underscore inserted when needed. For example, `portrait` gives `portrait_res1_width`. Use a different prefix on each selector node when a workflow has more than one.
+- If another Set node already uses a name, the new one gets a numeric suffix, for example `res1_width_0`, and the browser console shows a warning.
+- The setting, prefix, and managed Set node IDs save with the workflow, so reloading does not create duplicates.
+- Set nodes are KJNodes nodes. A workflow saved with them shows missing nodes if KJNodes is later uninstalled.
 
 **Examples:**
 
