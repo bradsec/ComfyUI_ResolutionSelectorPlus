@@ -106,6 +106,8 @@ Maintenance: a model is listed when its ComfyUI class has a 2D latent, or is in 
 Set `res2_resolution` beyond `none` to reveal its output triple and the next selector. Repeat through res4. Setting an earlier slot to `none` clears later slots and their links. Saved workflows retain active slot selections and links.
 Older workflows with bare aspect ratios migrate to named values on load. If saved widget values are invalid or shifted, the frontend restores defaults and warns once. API prompts with bare ratios such as `16:9` also validate. Python still rejects unknown ratios.
 
+When KJNodes is installed, right-click Resolution Selector Plus and select **Auto Set nodes (KJNodes): Off** to turn it on. This optional setting creates one collapsed SetNode beside each active output and removes managed SetNodes when their slot deactivates or the setting is turned off. **Set node prefix...** adds an optional prefix, with an underscore inserted when needed. For example, `portrait` names the first SetNode `portrait_res1_width`. Existing SetNode names take precedence; managed names get a numeric suffix on a clash. Both settings and managed node IDs save with the workflow. Workflows saved with these SetNodes show missing nodes if KJNodes is later uninstalled.
+
 | Slot | Outputs |
 | --- | --- |
 | 1 | `res1_width` (INT), `res1_height` (INT), `res1_latent` (LATENT) |

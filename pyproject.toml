@@ -1,7 +1,7 @@
 [project]
 name = "comfyui_resolutionselectorplus"
 description = "Resolution Selector Plus selects image resolutions and latents; Resolution Selector Plus (Legacy) preserves existing presets and custom dimensions."
-version = "2.2.1"
+version = "2.3.0"
 license = {file = "LICENSE"}
 
 [project.urls]

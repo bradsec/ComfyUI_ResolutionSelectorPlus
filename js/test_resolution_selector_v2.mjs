@@ -40,6 +40,127 @@ function change(node, name, value) {
     item.callback?.(value);
 }
 
+function withKJNodes(run) {
+    const previous = globalThis.LiteGraph;
+    let nextId = 1;
+    globalThis.LiteGraph = {
+        registered_node_types: { SetNode: true },
+        createNode() {
+            return {
+                id: nextId++, type: 'SetNode', widgets: [{ value: '' }],
+                properties: {}, flags: {}, size: [120, 30],
+                validateName(graph) {
+                    const base = this.widgets[0].value;
+                    let name = base;
+                    let suffix = 2;
+                    while (graph._nodes.some(other => other !== this && other.type === 'SetNode'
+                        && other.widgets[0].value === name)) name = `${base}_${suffix++}`;
+                    this.widgets[0].value = name;
+                    this.title = `Set_${name}`;
+                },
+            };
+        },
+    };
+    const graph = {
+        _nodes: [],
+        add(node) { node.graph = this; this._nodes.push(node); },
+        remove(node) { this._nodes.splice(this._nodes.indexOf(node), 1); },
+        getNodeById(id) { return this._nodes.find(node => node.id === id); },
+    };
+    const node = makeNode();
+    node.id = nextId++;
+    node.pos = [100, 100];
+    node.properties = {};
+    node.connect = (slot, target) => { target.inputs = [{ link: { origin_id: node.id, origin_slot: slot } }]; };
+    graph.add(node);
+    const menu = () => { const options = []; node.getExtraMenuOptions?.(null, options); return options; };
+    const toggle = () => menu().find(option => option.content.includes('Auto Set nodes')).callback();
+    const sets = () => graph._nodes.filter(item => item.type === 'SetNode');
+    try { run({ node, graph, menu, toggle, sets }); } finally { globalThis.LiteGraph = previous; }
+}
+
+test('no KJNodes hides Auto Set menu', () => {
+    const previous = globalThis.LiteGraph;
+    globalThis.LiteGraph = { registered_node_types: {} };
+    try {
+        const node = makeNode();
+        install(node);
+        const options = [];
+        node.getExtraMenuOptions?.(null, options);
+        assert.deepEqual(options, []);
+    } finally { globalThis.LiteGraph = previous; }
+});
+
+test('Auto Set creates, grows, shrinks and removes managed triples', () => withKJNodes(({ node, menu, toggle, sets }) => {
+    install(node);
+    assert.equal(menu().find(option => option.content.includes('Auto Set nodes')).content, 'Auto Set nodes (KJNodes): Off');
+    toggle();
+    assert.deepEqual(sets().map(item => item.widgets[0].value), ['res1_width', 'res1_height', 'res1_latent']);
+    assert.deepEqual(sets().map(item => item.inputs[0].link.origin_slot), [0, 1, 2]);
+    assert.ok(sets().every(item => item.flags.collapsed));
+    assert.equal(menu().find(option => option.content.includes('Auto Set nodes')).content, 'Auto Set nodes (KJNodes): On');
+    change(node, 'res2_resolution', getResolutions('1:1', '1.0')[0]);
+    assert.deepEqual(sets().slice(3).map(item => item.widgets[0].value), ['res2_width', 'res2_height', 'res2_latent']);
+    change(node, 'res2_resolution', 'none');
+    assert.equal(sets().length, 3);
+    toggle();
+    assert.equal(sets().length, 0);
+}));
+
+test('prefix renames managed SetNodes and preserves manual nodes', () => withKJNodes(({ node, graph, menu, toggle, sets }) => {
+    const manual = globalThis.LiteGraph.createNode('SetNode');
+    manual.widgets[0].value = 'res1_width';
+    graph.add(manual);
+    install(node);
+    toggle();
+    assert.equal(sets()[1].widgets[0].value, 'res1_width_2');
+    const previousPrompt = globalThis.prompt;
+    globalThis.prompt = () => 'portrait';
+    try { menu().find(option => option.content.includes('Set node prefix')).callback(); }
+    finally { globalThis.prompt = previousPrompt; }
+    assert.deepEqual(sets().slice(1).map(item => item.widgets[0].value),
+        ['portrait_res1_width', 'portrait_res1_height', 'portrait_res1_latent']);
+    toggle();
+    assert.deepEqual(sets(), [manual]);
+}));
+
+test('configure reuses managed IDs; deleted SetNode returns on next sync', () => withKJNodes(({ node, graph, toggle, sets }) => {
+    install(node);
+    toggle();
+    const saved = { ...node.properties, autoSetNodeIds: { ...node.properties.autoSetNodeIds } };
+    node.onConfigure?.({});
+    assert.equal(sets().length, 3);
+    node.properties = saved;
+    node.onConfigure?.({});
+    assert.equal(sets().length, 3);
+    node._resolutionSelectorV2Refresh();
+    graph.remove(sets()[0]);
+    assert.equal(sets().length, 2);
+    node._resolutionSelectorV2Refresh();
+    assert.equal(sets().length, 3);
+}));
+
+test('sync reconnects a disconnected managed SetNode', () => withKJNodes(({ node, toggle, sets }) => {
+    install(node);
+    toggle();
+    sets()[0].inputs[0].link = null;
+    node._resolutionSelectorV2Refresh();
+    assert.equal(sets()[0].inputs[0].link.origin_slot, 0);
+}));
+
+test('saved managed ID waits for graph load before recreation', () => withKJNodes(({ node, graph, toggle, sets }) => {
+    install(node);
+    toggle();
+    const savedSet = sets()[0];
+    graph.remove(savedSet);
+    node.onConfigure?.({});
+    node._resolutionSelectorV2Refresh();
+    assert.equal(sets().length, 2);
+    graph.add(savedSet);
+    node._resolutionSelectorV2Refresh();
+    assert.equal(sets().length, 3);
+}));
+
 test('resolution candidates are filtered and unique', () => {
     const choices = getResolutions('16:9', '1.0');
     assert.ok(choices.length > 0);

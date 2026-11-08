@@ -55,6 +55,54 @@ export function syncSlots(node) {
     return count;
 }
 
+function syncSetNodes(node, count) {
+    if (!globalThis.LiteGraph?.registered_node_types?.SetNode || !node.graph) return;
+    const ids = node.properties.autoSetNodeIds ??= {};
+    const graph = node.graph;
+    const prefix = node.properties.setNodePrefix
+        ? `${node.properties.setNodePrefix.replace(/_+$/, '')}_` : '';
+    const active = new Set(node.outputs.slice(0, count * 3).map(output => output.name));
+    for (const [output, id] of Object.entries(ids)) {
+        if (node.properties.autoSetNodes && active.has(output)) continue;
+        const managed = graph.getNodeById(id);
+        if (managed?.type === 'SetNode') graph.remove(managed);
+        delete ids[output];
+    }
+    if (!node.properties.autoSetNodes) return;
+    node.outputs.slice(0, count * 3).forEach((output, slot) => {
+        let managed = graph.getNodeById(ids[output.name]);
+        let created = false;
+        if (!managed || managed.type !== 'SetNode') {
+            if (node._resolutionSelectorV2DeferMissingSetNodes && ids[output.name]) return;
+            managed = globalThis.LiteGraph.createNode('SetNode');
+            if (!managed) return;
+            managed.pos = [node.pos[0] + node.size[0] + 30, node.pos[1] + slot * 60];
+            graph.add(managed);
+            managed.flags.collapsed = true;
+            ids[output.name] = managed.id;
+            created = true;
+        }
+        if (created || (!node._resolutionSelectorV2DeferMissingSetNodes && !(managed.isInputConnected?.(0) ?? managed.inputs?.[0]?.link != null))) {
+            node.connect(slot, managed, 0);
+        }
+        const name = `${prefix}${output.name}`;
+        const current = managed.widgets[0].value;
+        if (current !== name && !(current.startsWith(`${name}_`)
+            && /^\d+$/.test(current.slice(name.length + 1)))) {
+            managed.widgets[0].value = name;
+            managed.validateName?.(graph);
+            if (managed.widgets[0].value !== name && !node._resolutionSelectorV2SetNameWarned) {
+                console.warn('Resolution Selector Plus: SetNode name already exists; using a suffix');
+                node._resolutionSelectorV2SetNameWarned = true;
+            }
+            managed.update?.();
+            managed.properties.previousName = managed.widgets[0].value;
+        }
+    });
+    delete node._resolutionSelectorV2DeferMissingSetNodes;
+    node.setDirtyCanvas?.(true, true);
+}
+
 export function install(node) {
     if (node._resolutionSelectorV2Installed) return;
     node._resolutionSelectorV2Installed = true;
@@ -87,6 +135,7 @@ export function install(node) {
             }
         }
         const count = resize ? syncSlots(node) : 4;
+        if (resize) syncSetNodes(node, count);
         for (let slot = 2; slot <= 4; slot++) {
             const visible = slot <= count + 1;
             for (const name of ['model', 'aspect_ratio', 'megapixels', 'resolution', 'multiple']) {
@@ -126,6 +175,7 @@ export function install(node) {
     const previousConfigure = node.onConfigure;
     node.onConfigure = function (...args) {
         const result = previousConfigure?.apply(this, args);
+        this._resolutionSelectorV2DeferMissingSetNodes = true;
         for (let slot = 1; slot <= 4; slot++) {
             const ratio = widget(`res${slot}_aspect_ratio`);
             const index = BARE_RATIOS.indexOf(ratio?.value);
@@ -133,6 +183,28 @@ export function install(node) {
         }
         refresh(true, false);
         return result;
+    };
+    const previousMenu = node.getExtraMenuOptions;
+    node.getExtraMenuOptions = function (_, options) {
+        previousMenu?.apply(this, arguments);
+        if (!globalThis.LiteGraph?.registered_node_types?.SetNode) return;
+        options.push({
+            content: `Auto Set nodes (KJNodes): ${this.properties?.autoSetNodes ? 'On' : 'Off'}`,
+            callback: () => {
+                this.properties ??= {};
+                this.properties.autoSetNodes = !this.properties.autoSetNodes;
+                refresh();
+            },
+        }, {
+            content: 'Set node prefix...',
+            callback: () => {
+                const prefix = globalThis.prompt?.('Set node prefix', this.properties?.setNodePrefix ?? '');
+                if (prefix === null || prefix === undefined) return;
+                this.properties ??= {};
+                this.properties.setNodePrefix = prefix;
+                refresh();
+            },
+        });
     };
     node._resolutionSelectorV2Refresh = refresh;
     refresh();
