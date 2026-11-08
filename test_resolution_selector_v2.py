@@ -243,7 +243,7 @@ class TestResolutionSelectorV2(unittest.TestCase):
         from nodes import ResolutionSelector, get_all_resolutions, format_resolution
         test_resolution_selector.MockTorch.zeros = staticmethod(lambda shape, **kwargs: tuple(shape))
         models = ResolutionSelector.INPUT_TYPES()['required']['model'][0]
-        self.assertEqual(models[:6], ['All', 'Flux', 'Qwen Image', 'Z-Image', 'SD 1.5', 'SDXL'])
+        self.assertEqual(models, ['All'] + ResolutionSelectorV2.INPUT_TYPES()['required']['res1_model'][0])
         self.assertIn('HunyuanImage 2.1', models)
         label = format_resolution(1024, 1024)
         self.assertIn(label, get_all_resolutions())
@@ -284,7 +284,7 @@ class TestResolutionSelectorV2(unittest.TestCase):
             self.assertLessEqual(len(listed), len(get_all_resolutions()))
             for label in listed:
                 ResolutionSelector().select_resolution(model, label)
-        self.assertLess(len(get_resolution_list('HunyuanImage 2.1')), len(get_resolution_list('SD3')))
+        self.assertLessEqual(len(get_resolution_list('HunyuanImage 2.1')), 17)
 
     def test_v3_registration_matches_v1(self):
         class Port:

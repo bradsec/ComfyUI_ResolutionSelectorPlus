@@ -21,6 +21,7 @@ from nodes import (
     format_resolution,
     get_resolution_list,
     get_all_resolutions,
+    get_default_resolution,
     get_latent_channels,
     parse_resolution_string,
     MODEL_RESOLUTIONS
@@ -40,8 +41,7 @@ def test_format_resolution():
     print("\nTesting resolution formatting:")
     result = format_resolution(1920, 1080)
     print(f"  1920x1080 → '{result}'")
-    # With padding, should be "1920x1080    (16:9 Landscape)" - 13 chars total for resolution part
-    assert "(16:9 Landscape)" in result, f"Should contain aspect ratio and orientation"
+    assert result == "1920x1080 (16:9 Widescreen)"
     assert result.startswith("1920x1080"), f"Should start with resolution"
 
     result = format_resolution(1024, 1024)
@@ -51,14 +51,14 @@ def test_format_resolution():
 
     result = format_resolution(1080, 1920)
     print(f"  1080x1920 → '{result}'")
-    assert "(9:16 Portrait)" in result, f"Should contain aspect ratio and orientation"
+    assert result == "1080x1920 (9:16 Portrait Widescreen)"
     assert result.startswith("1080x1920"), f"Should start with resolution"
     print("  ✓ Format resolution tests passed")
 
 def test_parse_resolution():
     """Test resolution string parsing"""
     print("\nTesting resolution string parsing:")
-    # Test with padding (as it will be in the actual dropdown)
+    # Saved workflows may still contain padded labels.
     width, height = parse_resolution_string("1920x1080    (16:9 Landscape)")
     assert width == 1920 and height == 1080, "Should parse 1920x1080 with padding"
 
@@ -75,8 +75,8 @@ def test_model_resolutions():
     print("\nTesting model resolution lists:")
 
     # Test individual model
-    flux_res = get_resolution_list("Flux")
-    print(f"  Flux has {len(flux_res)} resolutions")
+    flux_res = get_resolution_list("Flux.1")
+    print(f"  Flux.1 has {len(flux_res)} resolutions")
     assert len(flux_res) > 0, "Flux should have resolutions"
     # Flux uses 16-pixel divisibility, so 1920x1080 becomes 1920x1088
     assert any("1920x1088" in r for r in flux_res), "Flux should have 1920x1088 (Full HD adapted to 16px divisibility)"
@@ -120,7 +120,7 @@ def test_all_resolutions_unique():
 def test_latent_channels():
     """R1: latent channel count must match the model (4 SD-based, 16 Flux/Qwen/Z-Image)"""
     print("\nTesting latent channel mapping:")
-    expected = {"Flux": 16, "Qwen Image": 16, "Z-Image": 16, "SD 1.5": 4, "SDXL": 4, "All": 4}
+    expected = {"Flux": 16, "Flux.1": 16, "Qwen Image": 16, "Qwen-Image": 16, "Z-Image": 16, "SD 1.5": 4, "SDXL": 4, "All": 4}
     for model, channels in expected.items():
         got = get_latent_channels(model)
         assert got == channels, f"{model}: expected {channels} channels, got {got}"
@@ -132,7 +132,7 @@ def test_qwen_official_resolutions():
     print("\nTesting official Qwen resolutions in 16-channel models:")
     want = [(1328, 1328), (1664, 928), (928, 1664), (1472, 1104),
             (1104, 1472), (1584, 1056), (1056, 1584)]
-    for model in ["Flux", "Qwen Image", "Z-Image"]:
+    for model in ["Flux.1", "Qwen-Image", "Z-Image"]:
         resolutions = get_resolution_list(model)
         for w, h in want:
             s = format_resolution(w, h)
@@ -209,6 +209,45 @@ class TestResolutionSelector(unittest.TestCase):
 
     def test_js_table_matches_python(self):
         test_js_table_matches_python()
+
+    def test_legacy_models_match_new_node(self):
+        from nodes import ResolutionSelector, ResolutionSelectorV2
+        self.assertEqual(ResolutionSelector.INPUT_TYPES()['required']['model'][0],
+                         ['All'] + ResolutionSelectorV2.INPUT_TYPES()['required']['res1_model'][0])
+
+    def test_generated_presets_and_defaults(self):
+        from nodes import ResolutionSelector, V2_MODELS, V2_RATIOS
+        node = ResolutionSelector()
+        for model in ['All', *V2_MODELS]:
+            labels = get_resolution_list(model)
+            self.assertTrue(labels, model)
+            self.assertIn(get_default_resolution(model), labels, model)
+            for label in labels:
+                self.assertIs(node.VALIDATE_INPUTS(model=model, resolution=label), True,
+                              (model, label))
+            if model != 'All' and model not in MODEL_RESOLUTIONS:
+                self.assertEqual(len(labels), len(set(labels)))
+                self.assertLessEqual(len(labels), len(V2_RATIOS))
+                self.assertTrue(all(800000 <= w * h <= 1200000 for w, h in
+                                    map(parse_resolution_string, labels)), model)
+
+    def test_old_names_and_labels_run(self):
+        from nodes import ResolutionSelector
+        MockTorch.zeros = staticmethod(lambda shape, **kwargs: tuple(shape))
+        node = ResolutionSelector()
+        for old, new, label in (("Flux", "Flux.1", "1024x1024    (1:1 Square)"),
+                                ("Qwen Image", "Qwen-Image", "1920x1080    (16:9 Landscape)")):
+            self.assertIs(ResolutionSelector.VALIDATE_INPUTS(model=old, resolution=label), True)
+            self.assertEqual(node.select_resolution(old, label), node.select_resolution(new, label))
+        self.assertIs(ResolutionSelector.VALIDATE_INPUTS(model="SDXL", resolution="1024x1024    (1:1 Square)"), True)
+        self.assertIs(ResolutionSelector.VALIDATE_INPUTS(model="SD3", resolution="2048x2048    (1:1 Square)"), True)
+        self.assertNotEqual(ResolutionSelector.VALIDATE_INPUTS(model="Flux", resolution="1025x1024 (1:1 Square)"), True)
+
+    def test_named_labels(self):
+        self.assertEqual(format_resolution(1024, 768), "1024x768 (4:3 Standard)")
+        self.assertEqual(format_resolution(768, 1024), "768x1024 (3:4 Portrait Standard)")
+        self.assertEqual(format_resolution(1536, 1024), "1536x1024 (3:2 Photo)")
+        self.assertEqual(format_resolution(1024, 1536), "1024x1536 (2:3 Portrait Photo)")
 
 
 if __name__ == "__main__":

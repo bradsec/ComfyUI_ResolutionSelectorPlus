@@ -172,23 +172,24 @@ test('resolution candidates are filtered and unique', () => {
 
 test('legacy unknown model uses All presets', () => {
     const source = readFileSync(new URL('./resolution_selector.js', import.meta.url), 'utf8')
-        .replace(/^import .*\n/, '') + '\nglobalThis.unknown = getResolutionsForModel("FutureImage"); globalThis.all = getAllResolutions();';
-    const context = { app: { registerExtension() {} } };
+        .replace(/^import .*\n/gm, '') + '\nglobalThis.unknown = getResolutionsForModel("FutureImage"); globalThis.all = getAllResolutions();';
+    const context = { app: { registerExtension() {} }, RATIOS, getResolutions };
     runInNewContext(source, context);
     assert.equal(context.unknown.length, context.all.length);
 });
 
-test('legacy discovered model lists presets its best multiple divides', () => {
+test('legacy discovered model generates valid presets for its best multiple', () => {
     const source = readFileSync(new URL('./resolution_selector.js', import.meta.url), 'utf8')
-        .replace(/^import .*\n/, '') + '\nglobalThis.all = getAllResolutions(); globalThis.f32 = getResolutionsForModel("Future", { Future: { best_multiple: 32 } }); globalThis.f16 = getResolutionsForModel("Future", { Future: { best_multiple: 16 } });';
-    const context = { app: { registerExtension() {} } };
+        .replace(/^import .*\n/gm, '') + '\nglobalThis.all = getAllResolutions({ Future: { best_multiple: 32 } }); globalThis.f32 = getResolutionsForModel("Future", { Future: { best_multiple: 32 } }); globalThis.f16 = getResolutionsForModel("Future", { Future: { best_multiple: 16 } });';
+    const context = { app: { registerExtension() {} }, RATIOS, getResolutions };
     runInNewContext(source, context);
     const sides = label => label.match(/^(\d+)x(\d+)/).slice(1).map(Number);
-    assert.ok(context.f32.length > 0 && context.f32.length < context.f16.length);
+    assert.ok(context.f32.length > 0 && context.f32.length <= RATIOS.length);
+    assert.ok(context.f16.length > 0 && context.f16.length <= RATIOS.length);
     assert.ok(context.f16.length < context.all.length);
     assert.ok(context.f32.every(label => sides(label).every(side => side % 32 === 0)));
     assert.ok(context.f16.every(label => sides(label).every(side => side % 16 === 0)));
-    assert.ok(context.all.filter(label => sides(label).every(side => side % 32 === 0)).every(label => context.f32.includes(label)));
+    assert.ok(context.f32.every(label => context.all.includes(label)));
 });
 
 test('new model metadata drives rounding without a JS model table', () => {

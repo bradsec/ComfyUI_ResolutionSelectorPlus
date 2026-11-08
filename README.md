@@ -163,8 +163,8 @@ The legacy node remains available for saved workflows. Its inputs and six output
 **Add Node:** `Add Node > utils > Resolution Selector Plus (Legacy)`
 
 **Inputs:**
-- `model` (dropdown) - Select an installed image model or "All" for all resolutions. Existing names and presets remain; newly discovered models list the All presets that their best multiple divides.
-- `resolution` (dropdown) - Choose from model-optimized presets with aspect ratios (e.g., "1920x1080 (16:9 Landscape)")
+- `model` (dropdown) - Select from the same model names and order as the new node, plus "All". Saved "Flux" and "Qwen Image" values still work as "Flux.1" and "Qwen-Image".
+- `resolution` (dropdown) - Curated models keep their presets. Other models get one size near 1 MP for each named ratio, rounded to their best multiple. Labels use names such as "1920x1080 (16:9 Widescreen)". Saved labels with old names or padding still work.
 - `resolution_multiplier` (dropdown) - Multiply preset resolution (1x, 2x, 3x, 4x)
 - `batch_size` (number) - Number of latent samples to generate (1-64, default: 1)
 - `custom_width` (optional) - Override with custom width (0-4096, step 8)
@@ -184,7 +184,7 @@ The legacy node remains available for saved workflows. Its inputs and six output
 
 **Basic preset with multiplier:**
 ```
-Resolution Selector Plus (Legacy) (model: SDXL, resolution: "1024x1024    (1:1 Square)", resolution_multiplier: 2x)
+Resolution Selector Plus (Legacy) (model: SDXL, resolution: "1024x1024 (1:1 Square)", resolution_multiplier: 2x)
   -> width: 2048, height: 2048
   -> latent -> KSampler
 ```
@@ -198,8 +198,8 @@ Resolution Selector Plus (Legacy) (custom_width: 1024, custom_height: 768, custo
 
 **Using "All" model option:**
 ```
-Resolution Selector Plus (Legacy) (model: All, resolution: "1920x1080    (16:9 Landscape)")
-  -> Shows all 76 unique resolutions from all models
+Resolution Selector Plus (Legacy) (model: All, resolution: "1920x1080 (16:9 Widescreen)")
+  -> Shows all 86 unique resolutions with the bundled model snapshot
 ```
 
 ---

@@ -16,13 +16,13 @@ except ImportError:
 # Model-specific resolution presets with constraints
 # Includes: model-optimized sizes + photo print (4x6, 5x7, 8x10) + digital/social + canvas art ratios
 MODEL_RESOLUTIONS = {
-    "Flux": {
+    "Flux.1": {
         "square": [(512, 512), (768, 768), (1024, 1024), (1088, 1088), (1280, 1280), (1328, 1328), (1536, 1536), (1920, 1920), (2048, 2048)],
         "portrait": [(688, 2048), (768, 1344), (832, 1216), (896, 1152), (928, 1664), (1024, 1536), (1024, 1792), (1024, 2048), (1056, 1584), (1088, 1920), (1104, 1472), (1152, 2048), (1200, 1792), (1360, 2048), (1456, 2048), (1536, 2048), (1616, 2048), (1632, 2048), (1712, 2048)],
         "landscape": [(1280, 720), (1344, 768), (1216, 832), (1152, 896), (1472, 1104), (1536, 1024), (1584, 1056), (1664, 928), (1792, 1024), (1792, 1200), (1920, 1088), (2048, 688), (2048, 1024), (2048, 1152), (2048, 1360), (2048, 1456), (2048, 1536), (2048, 1616), (2048, 1632), (2048, 1712)],
         "constraints": {"divisible_by": 16, "min": 256, "max": 2048, "latent_channels": 16}
     },
-    "Qwen Image": {
+    "Qwen-Image": {
         "square": [(1024, 1024), (1080, 1080), (1280, 1280), (1328, 1328), (1536, 1536), (1920, 1920), (2048, 2048)],
         "portrait": [(680, 2048), (928, 1664), (1024, 1536), (1024, 2048), (1056, 1584), (1080, 1920), (1104, 1472), (1152, 2048), (1200, 1800), (1368, 2048), (1464, 2048), (1536, 2048), (1608, 2048), (1640, 2048), (1704, 2048)],
         "landscape": [(1280, 720), (1472, 1104), (1536, 1024), (1584, 1056), (1664, 928), (1800, 1200), (1920, 1080), (2048, 680), (2048, 1024), (2048, 1152), (2048, 1368), (2048, 1464), (2048, 1536), (2048, 1608), (2048, 1640), (2048, 1704)],
@@ -92,31 +92,19 @@ def calculate_aspect_ratio(width, height):
 
 def format_resolution(width, height):
     """
-    Format resolution tuple into display string with aspect ratio and orientation.
-    Uses fixed-width formatting for better alignment in dropdowns.
+    Format resolution tuple with the named aspect ratio.
 
     Args:
         width (int): Width in pixels
         height (int): Height in pixels
 
     Returns:
-        str: Formatted string like "1920x1080  (16:9 Landscape)" with consistent spacing
+        str: Formatted string like "1920x1080 (16:9 Widescreen)"
     """
     aspect_ratio = calculate_aspect_ratio(width, height)
 
-    if width == height:
-        orientation = "Square"
-    elif width < height:
-        orientation = "Portrait"
-    else:
-        orientation = "Landscape"
-
-    # Format with fixed width for better alignment (e.g., "1920x1080  ")
-    # Most resolutions are 4 digits, so we pad to 9 characters (4x4 + 'x')
-    resolution_str = f"{width}x{height}"
-    padded_resolution = resolution_str.ljust(13)  # Pad to 13 chars for alignment
-
-    return f"{padded_resolution}({aspect_ratio} {orientation})"
+    name = V2_RATIO_BY_BARE[aspect_ratio].split("(", 1)[1].removesuffix(")")
+    return f"{width}x{height} ({aspect_ratio} {name})"
 
 
 def get_resolution_list(model_name):
@@ -129,14 +117,21 @@ def get_resolution_list(model_name):
     Returns:
         list: Formatted resolution strings in order: square, portrait, landscape
     """
+    model_name = LEGACY_MODEL_ALIASES.get(model_name, model_name)
     if model_name == "All":
         return get_all_resolutions()
     if model_name in V2_MODELS and model_name not in LEGACY_EQUIVALENTS:
-        # Discovered models use the All list limited to presets their best
-        # multiple divides, the same rule _validate_dimensions enforces.
         best = V2_MODELS[model_name][2]
-        return [label for label in get_all_resolutions()
-                if all(side % best == 0 for side in parse_resolution_string(label))]
+        dimensions = set()
+        for ratio in V2_RATIOS:
+            candidates = get_v2_resolutions(ratio, "1.0")
+            width, height = min((parse_resolution_string(label) for label in candidates),
+                                key=lambda size: abs(size[0] * size[1] - 1000000))
+            dimensions.add((max(best, ((width + best // 2) // best) * best),
+                            max(best, ((height + best // 2) // best) * best)))
+        return [format_resolution(w, h) for w, h in sorted(dimensions,
+                key=lambda size: (0 if size[0] == size[1] else 1 if size[0] < size[1] else 2,
+                                  max(size) / min(size), size[0] * size[1]))]
 
     if model_name not in MODEL_RESOLUTIONS:
         return []
@@ -164,18 +159,21 @@ def get_default_resolution(model_name):
     """
     # Model-specific native/optimal resolutions
     default_resolutions = {
-        "Flux": (1024, 1024),      # Flux native
-        "Qwen Image": (1328, 1328), # Qwen native
+        "Flux.1": (1024, 1024),      # Flux native
+        "Qwen-Image": (1328, 1328), # Qwen native
         "Z-Image": (1024, 1024),    # Z-Image native
         "SD 1.5": (512, 512),       # SD 1.5 native
         "SDXL": (1024, 1024),       # SDXL native
         "All": (1024, 1024),        # Default for "All"
     }
 
+    model_name = LEGACY_MODEL_ALIASES.get(model_name, model_name)
     if model_name in default_resolutions:
         width, height = default_resolutions[model_name]
         return format_resolution(width, height)
 
+    if model_name in V2_MODELS:
+        return get_resolution_list(model_name)[0]
     # Fallback to 1024x1024
     return format_resolution(1024, 1024)
 
@@ -197,6 +195,7 @@ def get_latent_channels(model_name):
     Returns:
         int: Latent channel count.
     """
+    model_name = LEGACY_MODEL_ALIASES.get(model_name, model_name)
     if model_name in V2_MODELS and model_name not in LEGACY_EQUIVALENTS:
         return V2_MODEL_FORMATS[model_name][0]
     model_data = MODEL_RESOLUTIONS.get(model_name)
@@ -222,6 +221,10 @@ def get_all_resolutions():
                 key = (width, height)
                 if key not in unique_resolutions:
                     unique_resolutions[key] = format_resolution(width, height)
+    for model_name in V2_MODELS:
+        if model_name not in MODEL_RESOLUTIONS:
+            for label in get_resolution_list(model_name):
+                unique_resolutions[parse_resolution_string(label)] = label
 
     # Sort by total pixels, then by width
     sorted_resolutions = sorted(
@@ -262,7 +265,7 @@ def parse_resolution_string(resolution_str):
 
 
 # Tooltips (shared by both API wrappers).
-TIP_MODEL  = "Image model. Existing models keep their presets; discovered models and 'All' show every preset."
+TIP_MODEL  = "Image model. Curated models keep their presets; other models get sizes near 1 MP for each named ratio."
 TIP_RESOLUTION = "Preset resolution. The list filters to the selected model."
 TIP_MULT   = "Multiplies the preset width and height (1x to 4x)."
 TIP_BATCH  = "Number of latent samples in the preset latent batch."
@@ -288,6 +291,22 @@ class ResolutionSelector:
     """
     DESCRIPTION = "Resolution Selector Plus (Legacy): preset sizes and custom latents. Use Resolution Selector Plus for new workflows."
 
+    @classmethod
+    def VALIDATE_INPUTS(cls, model=None, resolution=None):
+        if model is not None and not isinstance(model, str):
+            return "Model must be a string"
+        if model is not None and model not in V2_MODELS and model not in LEGACY_MODEL_ALIASES and model != "All":
+            return f"Unsupported model: {model!r}"
+        if resolution is not None:
+            if not isinstance(resolution, str):
+                return "Resolution must be a string"
+            try:
+                width, height = parse_resolution_string(resolution)
+                cls._validate_dimensions(LEGACY_MODEL_ALIASES.get(model, model), width, height)
+            except (TypeError, ValueError) as error:
+                return str(error)
+        return True
+
     def __init__(self):
         """Initialize device for latent tensor generation."""
         if COMFY_AVAILABLE:
@@ -303,8 +322,7 @@ class ResolutionSelector:
         Returns:
             dict: Input configuration with required and optional fields
         """
-        model_list = ["All"] + list(MODEL_RESOLUTIONS) + [name for name in V2_MODELS
-                                                         if name not in LEGACY_EQUIVALENTS and name != "Other (4ch /8)"]
+        model_list = ["All"] + list(V2_MODELS)
 
         # Get all possible resolutions across all models (JavaScript will filter dynamically)
         all_resolutions = get_all_resolutions()
@@ -314,8 +332,7 @@ class ResolutionSelector:
                 "model": (model_list, {
                     "default": "SDXL",
                     "tooltip": TIP_MODEL,
-                    "model_info": {name: {"best_multiple": V2_MODELS[name][2]} for name in model_list
-                                   if name in V2_MODELS and name not in LEGACY_EQUIVALENTS},
+                    "model_info": {name: {"best_multiple": V2_MODELS[name][2]} for name in V2_MODELS},
                 }),
                 "resolution": (all_resolutions, {
                     "default": format_resolution(1024, 1024),
@@ -389,6 +406,7 @@ class ResolutionSelector:
         Returns:
             tuple: (width: int, height: int, latent: dict, custom_width: int, custom_height: int, custom_latent: dict)
         """
+        model = LEGACY_MODEL_ALIASES.get(model, model)
         # Parse multipliers (e.g., "2x" -> 2)
         multiplier = int(resolution_multiplier.replace("x", ""))
         custom_mult = int(custom_multiplier.replace("x", ""))
@@ -435,7 +453,8 @@ class ResolutionSelector:
 
             return (width, height, latent, 0, 0, custom_latent)
 
-    def _validate_dimensions(self, model, width, height):
+    @staticmethod
+    def _validate_dimensions(model, width, height):
         """
         Validate dimensions against model-specific constraints.
 
@@ -447,6 +466,7 @@ class ResolutionSelector:
         Raises:
             ValueError: If dimensions violate model constraints
         """
+        model = LEGACY_MODEL_ALIASES.get(model, model)
         if model in V2_MODELS and model not in LEGACY_EQUIVALENTS:
             constraints = {"divisible_by": V2_MODELS[model][2], "min": 64, "max": 4096}
         elif model in MODEL_RESOLUTIONS:
@@ -527,6 +547,7 @@ class ResolutionSelector:
 # include/exclude rules are documented in model_discovery.py.
 V2_MODELS = discover_models()
 LEGACY_EQUIVALENTS = {"Flux.1", "Qwen-Image", "Z-Image", "SD 1.5", "SDXL"}
+LEGACY_MODEL_ALIASES = {"Flux": "Flux.1", "Qwen Image": "Qwen-Image"}
 
 
 def load_v2_model_formats():
@@ -719,6 +740,10 @@ try:
                     io.Latent.Output(id="custom_latent", display_name="custom_latent", tooltip=OUTPUT_TIPS["custom_latent"]),
                 ],
             )
+
+        @classmethod
+        def validate_inputs(cls, model=None, resolution=None):
+            return ResolutionSelector.VALIDATE_INPUTS(model, resolution)
 
         @classmethod
         def execute(cls, model, resolution, resolution_multiplier="1x", batch_size=1,
