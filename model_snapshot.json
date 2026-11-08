@@ -1,0 +1,656 @@
+{
+  "LotusD": [
+    "SD15",
+    4,
+    8,
+    2
+  ],
+  "Stable_Zero123": [
+    "SD15",
+    4,
+    8,
+    2
+  ],
+  "SD15_instructpix2pix": [
+    "SD15",
+    4,
+    8,
+    2
+  ],
+  "SD15": [
+    "SD15",
+    4,
+    8,
+    2
+  ],
+  "SD20": [
+    "SD15",
+    4,
+    8,
+    2
+  ],
+  "SD21UnclipL": [
+    "SD15",
+    4,
+    8,
+    2
+  ],
+  "SD21UnclipH": [
+    "SD15",
+    4,
+    8,
+    2
+  ],
+  "SDXL_instructpix2pix": [
+    "SDXL",
+    4,
+    8,
+    2
+  ],
+  "SDXLRefiner": [
+    "SDXL",
+    4,
+    8,
+    2
+  ],
+  "SDXL": [
+    "SDXL",
+    4,
+    8,
+    2
+  ],
+  "SSD1B": [
+    "SDXL",
+    4,
+    8,
+    2
+  ],
+  "KOALA_700M": [
+    "SDXL",
+    4,
+    8,
+    2
+  ],
+  "KOALA_1B": [
+    "SDXL",
+    4,
+    8,
+    2
+  ],
+  "Segmind_Vega": [
+    "SDXL",
+    4,
+    8,
+    2
+  ],
+  "SD_X4Upscaler": [
+    "SD_X4",
+    4,
+    8,
+    2
+  ],
+  "Stable_Cascade_C": [
+    "SC_Prior",
+    16,
+    42,
+    2
+  ],
+  "Stable_Cascade_B": [
+    "SC_B",
+    4,
+    4,
+    2
+  ],
+  "SV3D_u": [
+    "SD15",
+    4,
+    8,
+    2
+  ],
+  "SV3D_p": [
+    "SD15",
+    4,
+    8,
+    2
+  ],
+  "SD3": [
+    "SD3",
+    16,
+    8,
+    2
+  ],
+  "StableAudio3": [
+    "StableAudio3",
+    256,
+    8,
+    1
+  ],
+  "StableAudio": [
+    "StableAudio1",
+    64,
+    8,
+    1
+  ],
+  "AuraFlow": [
+    "SDXL",
+    4,
+    8,
+    2
+  ],
+  "PixArtAlpha": [
+    "SD15",
+    4,
+    8,
+    2
+  ],
+  "PixArtSigma": [
+    "SDXL",
+    4,
+    8,
+    2
+  ],
+  "HunyuanDiT": [
+    "SDXL",
+    4,
+    8,
+    2
+  ],
+  "HunyuanDiT1": [
+    "SDXL",
+    4,
+    8,
+    2
+  ],
+  "FluxInpaint": [
+    "Flux",
+    16,
+    8,
+    2
+  ],
+  "Flux": [
+    "Flux",
+    16,
+    8,
+    2
+  ],
+  "LongCatImage": [
+    "Flux",
+    16,
+    8,
+    2
+  ],
+  "FluxSchnell": [
+    "Flux",
+    16,
+    8,
+    2
+  ],
+  "GenmoMochi": [
+    "Mochi",
+    12,
+    8,
+    3
+  ],
+  "LTXV": [
+    "LTXV",
+    128,
+    32,
+    3
+  ],
+  "LTXAV": [
+    "LTXAV",
+    128,
+    32,
+    3
+  ],
+  "MiniMaxH3": [
+    "MiniMaxH3AV",
+    32,
+    16,
+    3
+  ],
+  "HunyuanVideo15_SR_Distilled": [
+    "HunyuanVideo15",
+    32,
+    16,
+    3
+  ],
+  "HunyuanVideo15": [
+    "HunyuanVideo15",
+    32,
+    16,
+    3
+  ],
+  "HunyuanImage21Refiner": [
+    "HunyuanImage21Refiner",
+    64,
+    8,
+    3
+  ],
+  "HunyuanImage21": [
+    "HunyuanImage21",
+    64,
+    32,
+    2
+  ],
+  "HunyuanVideoSkyreelsI2V": [
+    "HunyuanVideo",
+    16,
+    8,
+    3
+  ],
+  "HunyuanVideoI2V": [
+    "HunyuanVideo",
+    16,
+    8,
+    3
+  ],
+  "HunyuanVideo": [
+    "HunyuanVideo",
+    16,
+    8,
+    3
+  ],
+  "CosmosT2V": [
+    "Cosmos1CV8x8x8",
+    16,
+    8,
+    3
+  ],
+  "CosmosI2V": [
+    "Cosmos1CV8x8x8",
+    16,
+    8,
+    3
+  ],
+  "CosmosT2IPredict2": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "CosmosI2VPredict2": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "ZImagePixelSpace": [
+    "ZImagePixelSpace",
+    3,
+    1,
+    2
+  ],
+  "MingImage": [
+    "MingImage",
+    16,
+    8,
+    3
+  ],
+  "ZImage": [
+    "Flux",
+    16,
+    8,
+    2
+  ],
+  "PiD": [
+    "PixelDiTPixel",
+    3,
+    1,
+    2
+  ],
+  "PixelDiTT2I": [
+    "PixelDiTPixel",
+    3,
+    1,
+    2
+  ],
+  "Lumina2": [
+    "Flux",
+    16,
+    8,
+    2
+  ],
+  "WAN22_T2V": [
+    "Wan22",
+    48,
+    16,
+    3
+  ],
+  "WAN21_CausalAR_T2V": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "WAN21_T2V": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "WAN21_I2V": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "WAN21_FunControl2V": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "WAN21_Vace": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "WAN21_Camera": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "WAN22_Camera": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "WAN22_S2V": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "WAN21_HuMo": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "WAN22_Animate": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "WAN_Animate2": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "WAN21_FlowRVS": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "WAN21_SCAIL": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "WAN21_SCAIL2": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "WAN22_RelayVSR": [
+    "RelayVSR",
+    48,
+    16,
+    3
+  ],
+  "WAN22_WanDancer": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "Hunyuan3Dv2mini": [
+    "Hunyuan3Dv2mini",
+    64,
+    8,
+    1
+  ],
+  "Hunyuan3Dv2": [
+    "Hunyuan3Dv2",
+    64,
+    8,
+    1
+  ],
+  "Hunyuan3Dv2_1": [
+    "Hunyuan3Dv2_1",
+    64,
+    8,
+    1
+  ],
+  "TripoSplat": [
+    "TripoSplat",
+    16,
+    8,
+    2
+  ],
+  "HiDream": [
+    "Flux",
+    16,
+    8,
+    2
+  ],
+  "HiDreamO1": [
+    "HiDreamO1Pixel",
+    3,
+    1,
+    2
+  ],
+  "SenseNovaU15": [
+    "HiDreamO1Pixel",
+    3,
+    1,
+    2
+  ],
+  "Chroma": [
+    "Flux",
+    16,
+    8,
+    2
+  ],
+  "SeedVR2": [
+    "SeedVR2",
+    16,
+    8,
+    3
+  ],
+  "ChromaRadiance": [
+    "ChromaRadiance",
+    3,
+    1,
+    2
+  ],
+  "ACEStep": [
+    "ACEAudio",
+    8,
+    8,
+    2
+  ],
+  "ACEStep15": [
+    "ACEAudio15",
+    64,
+    8,
+    1
+  ],
+  "MiniMaxMusic3": [
+    "MiniMaxMusic3",
+    128,
+    8,
+    1
+  ],
+  "YuE2": [
+    "YuE2",
+    64,
+    8,
+    1
+  ],
+  "Omnigen2": [
+    "Flux",
+    16,
+    8,
+    2
+  ],
+  "Boogu": [
+    "Flux",
+    16,
+    8,
+    2
+  ],
+  "MageFlow": [
+    "Flux2",
+    128,
+    16,
+    2
+  ],
+  "QwenImage": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "QwenImage21": [
+    "QwenImage21",
+    64,
+    16,
+    2
+  ],
+  "JoyImage": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "Ideogram4": [
+    "Flux2",
+    128,
+    16,
+    2
+  ],
+  "Krea2": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "MOSSImage": [
+    "Flux2",
+    128,
+    16,
+    2
+  ],
+  "Fibo2": [
+    "Flux2",
+    128,
+    16,
+    2
+  ],
+  "Flux2": [
+    "Flux2",
+    128,
+    16,
+    2
+  ],
+  "Flux3": [
+    "Flux2",
+    128,
+    16,
+    2
+  ],
+  "Lens": [
+    "Flux2",
+    128,
+    16,
+    2
+  ],
+  "Kandinsky5Image": [
+    "Flux",
+    16,
+    8,
+    2
+  ],
+  "Kandinsky5": [
+    "HunyuanVideo",
+    16,
+    8,
+    3
+  ],
+  "Anima": [
+    "Wan21",
+    16,
+    8,
+    3
+  ],
+  "RT_DETR_v4": [
+    "LatentFormat",
+    4,
+    8,
+    2
+  ],
+  "ErnieImage": [
+    "Flux2",
+    128,
+    16,
+    2
+  ],
+  "SAM3": [
+    "LatentFormat",
+    4,
+    8,
+    2
+  ],
+  "SAM31": [
+    "LatentFormat",
+    4,
+    8,
+    2
+  ],
+  "CogVideoX_Inpaint": [
+    "CogVideoX",
+    16,
+    8,
+    3
+  ],
+  "CogVideoX_I2V": [
+    "CogVideoX",
+    16,
+    8,
+    3
+  ],
+  "CogVideoX_T2V": [
+    "CogVideoX",
+    16,
+    8,
+    3
+  ],
+  "SVD_img2vid": [
+    "SD15",
+    4,
+    8,
+    2
+  ],
+  "Trellis2": [
+    "Trellis2",
+    32,
+    8,
+    2
+  ],
+  "DepthAnything3": [
+    "LatentFormat",
+    4,
+    8,
+    2
+  ]
+}

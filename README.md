@@ -2,14 +2,14 @@
 
 Custom node for [ComfyUI](https://github.com/comfyanonymous/ComfyUI) providing easy resolution and empty latent selection for image generation workflows.
 
-![Resolution Selector Plus v2 node](node_preview.png)
+![Resolution Selector Plus node](node_preview.png)
 
 ## Features
 
-- **Resolution Selector Plus v2:** pick aspect ratio and megapixels, then choose from matching resolutions.
+- **Resolution Selector Plus:** pick a named aspect ratio and megapixels, then choose from matching resolutions.
 - **Up to four resolution slots:** each active slot has width, height, and empty latent outputs.
-- **Per-slot model and rounding multiple:** choose a model family and pixel multiple independently for each slot.
-- **Legacy Resolution Selector Plus:** existing model presets and custom dimensions remain available for saved workflows.
+- **Per-slot model and rounding multiple:** choose a discovered ComfyUI image model and pixel multiple independently for each slot.
+- **Resolution Selector Plus (Legacy):** existing model presets and custom dimensions remain available for saved workflows.
 
 ## Installation
 
@@ -34,9 +34,11 @@ git clone https://github.com/bradsec/ComfyUI_ResolutionSelectorPlus.git
 
 ## Usage
 
-### Resolution Selector Plus v2
+### Resolution Selector Plus
 
-**Add Node:** `Add Node > utils > Resolution Selector Plus v2`
+**Add Node:** `Add Node > utils > Resolution Selector Plus`
+
+The internal node IDs remain `ResolutionSelectorPlusV2` and `ResolutionSelectorPlus` for saved workflow compatibility.
 
 Each slot has these controls. Slot 1 is required; slots 2 through 4 appear as you activate preceding slots.
 The node displays names such as "Res 1 model" and "Res 2 aspect ratio"; workflow input IDs remain `resN_model` and `resN_aspect_ratio`.
@@ -44,33 +46,65 @@ Resolution labels are compact, for example `1280x704 (16:9)`, with no orientatio
 
 | Input | Choices and default | Meaning |
 | --- | --- | --- |
-| `res1_model` through `res4_model` | Models below; default SDXL | Sets each slot's latent channels, spatial downscale, and tensor shape. |
-| `res1_aspect_ratio` through `res4_aspect_ratio` | 1:1, 5:4, 4:3, 3:2, 16:10, 16:9, 2:1, 21:9, 12:5, 3:1, 3:4, 2:3, 5:8, 9:16, 1:2, 5:12, 1:3; default 1:1 | Filters each slot's resolution list. |
+| `res1_model` through `res4_model` | Image models discovered from installed ComfyUI; default SDXL | Sets each slot's latent channels, spatial downscale, and tensor shape. Released model labels remain valid in saved workflows. |
+| `res1_aspect_ratio` through `res4_aspect_ratio` | 1:1 (Square), 5:4 (Large Format), 4:3 (Standard), 3:4 (Portrait Standard), 3:2 (Photo), 2:3 (Portrait Photo), 16:10 (Widescreen Monitor), 5:8 (Portrait Widescreen Monitor), 16:9 (Widescreen), 9:16 (Portrait Widescreen), 2:1 (Univisium), 1:2 (Portrait Univisium), 21:9 (Ultrawide), 12:5 (Cinemascope), 5:12 (Portrait Cinemascope), 3:1 (Panorama), 1:3 (Portrait Panorama); default 1:1 (Square) | Filters each slot's resolution list. |
 | `res1_megapixels` through `res4_megapixels` | 0.25, 0.5, 1.0, 1.5, 2.0, 4.0; default 1.0 | Filters each slot's resolution list. |
 | `res1_resolution` through `res4_resolution` | Up to three base candidates near 90%, 100%, and 110% of target area. Each target snaps to 64 pixels; if its result has a different labeled ratio, it retries at 32, 16, then 8 pixels. Duplicate candidates appear once. Slot 1 defaults to the first 1:1, 1.0 MP candidate; later slots default to `none`. | Selects a base resolution. |
 | `res1_multiple` through `res4_multiple` | 8, 16, 32, 64; default 8 | Rounds that slot's width and height to the nearest multiple, with half values rounded up and a minimum of one multiple. |
 
-Changing a slot's `resN_model` sets its `resN_multiple` to the best multiple below. You can change it afterward; saved overrides remain on reload. If it is smaller than that model's latent downscale, latent dimensions use integer division and the node logs a note.
+The dropdown reads `comfy.supported_models.models` at startup. A bundled ComfyUI v0.44.0 snapshot supplies choices when ComfyUI cannot be imported. Changing a slot's `resN_model` sets its `resN_multiple` to the best multiple below. You can change it afterward; saved overrides remain on reload. If it is smaller than that model's latent downscale, latent dimensions use integer division and the node logs a note.
 
-| Model | Channels | Downscale | Best multiple | Other models with the same latent format |
-| --- | ---: | ---: | ---: | --- |
-| SD 1.5 | 4 | 8 | 8 | SD 2, SSD-1B |
-| SDXL | 4 | 8 | 8 | Vega, KOALA |
-| SD3 | 16 | 8 | 16 | None listed |
-| Flux.1 | 16 | 8 | 16 | Chroma, Z-Image, HiDream |
-| Flux.2 | 128 | 16 | 16 | Flux.3, Ideogram4 |
-| Chroma | 16 | 8 | 16 | Flux.1, Z-Image |
-| Z-Image | 16 | 8 | 16 | Flux.1, HiDream |
-| Qwen-Image | 16 | 8 | 16 | Krea2, Anima, JoyImage (5D, one frame) |
-| Qwen-Image 2.1 | 64 | 16 | 16* | None listed |
-| HiDream | 16 | 8 | 16 | Flux.1, Chroma |
-| HunyuanImage 2.1 | 64 | 32 | 32* | None listed |
-| Other (4ch /8) | 4 | 8 | 8 | PixArt, AuraFlow |
+| Model | Channels | Downscale | Best multiple |
+| --- | ---: | ---: | ---: |
+| SD 1.5 | 4 | 8 | 8 |
+| SDXL | 4 | 8 | 8 |
+| SD3 | 16 | 8 | 16 |
+| Flux.1 | 16 | 8 | 16 |
+| Flux.2 | 128 | 16 | 16 |
+| Chroma | 16 | 8 | 16 |
+| Z-Image | 16 | 8 | 16 |
+| Qwen-Image | 16 | 8 | 16 |
+| Qwen-Image 2.1 | 64 | 16 | 16† |
+| HiDream | 16 | 8 | 16 |
+| HunyuanImage 2.1 | 64 | 32 | 32† |
+| Flux.3 | 128 | 16 | 16† |
+| MOSS-Image | 128 | 16 | 16† |
+| Ideogram 4 | 128 | 16 | 16† |
+| Krea 2 | 16 | 8 | 16 |
+| Anima | 16 | 8 | 16 |
+| JoyImage | 16 | 8 | 16 |
+| AuraFlow | 4 | 8 | 16 |
+| Boogu | 16 | 8 | 16† |
+| Chroma Radiance | 3 | 1 | 16† |
+| Cosmos Predict2 | 16 | 8 | 16 |
+| ERNIE-Image | 128 | 16 | 16† |
+| FIBO 2 | 128 | 16 | 16† |
+| Flux.1 Schnell | 16 | 8 | 16 |
+| HiDream-O1 | 3 | 1 | 32 |
+| Hunyuan-DiT | 4 | 8 | 16 |
+| Kandinsky 5 Image | 16 | 8 | 16† |
+| Lens | 128 | 16 | 16† |
+| LongCat-Image | 16 | 8 | 16 |
+| Lumina Image 2.0 | 16 | 8 | 16 |
+| Mage Flow | 128 | 16 | 16 |
+| Ming-Image | 16 | 8 | 16† |
+| OmniGen2 | 16 | 8 | 16 |
+| PixArt-Alpha | 4 | 8 | 16 |
+| PixArt-Sigma | 4 | 8 | 16 |
+| PixelDiT | 3 | 1 | 16 |
+| SenseNova U1.5 | 3 | 1 | 32 |
+| KOALA | 4 | 8 | 8 |
+| SD 2.x | 4 | 8 | 8 |
+| SSD-1B | 4 | 8 | 8 |
+| Segmind Vega | 4 | 8 | 8 |
+| Other (4ch /8) | 4 | 8 | 8 |
 
-*Patch size is unverified for this model; the best multiple falls back to its downscale.
+† Medium confidence from ComfyUI source; checkpoint patch sizes may vary. Models not in this table use the smallest of 8, 16, 32 or 64 that is at least their latent downscale.
+
+Maintenance: a model is listed when its ComfyUI class has a 2D latent, or is in the 3D image allowlist (`INCLUDE_3D` in `model_discovery.py`), and is not in `EXCLUDE`. After a ComfyUI update, review new classes in `comfy.supported_models` and add non-image ones to `EXCLUDE`, 3D image models to `INCLUDE_3D`. Every label in this table stays selectable even if the installed ComfyUI no longer has its class (filled from `model_snapshot.json`), so saved values do not vanish. Unknown classes use their raw class name as the label.
 
 Set `res2_resolution` beyond `none` to reveal its output triple and the next selector. Repeat through res4. Setting an earlier slot to `none` clears later slots and their links. Saved workflows retain active slot selections and links.
-If an older v2 workflow contains invalid or shifted widget values, the frontend restores those controls to defaults and warns once for that node. Python still rejects invalid values at execution.
+Older workflows with bare aspect ratios migrate to named values on load. If saved widget values are invalid or shifted, the frontend restores defaults and warns once. API prompts with bare ratios such as `16:9` also validate. Python still rejects unknown ratios.
 
 | Slot | Outputs |
 | --- | --- |
@@ -84,26 +118,28 @@ Outputs are named `res1_width`, `res1_height`, `res1_latent`, through `res4_late
 **Examples:**
 
 ```text
-Resolution Selector Plus v2 (res1_model: SD3, res1_aspect_ratio: 16:9, res1_megapixels: 1.0)
-  -> choose a 16:9 resolution near 1 MP -> res1_latent -> KSampler
+Resolution Selector Plus (res1_model: SD3, res1_aspect_ratio: "16:9 (Widescreen)", res1_megapixels: 1.0,
+  res1_resolution: "1344x768 (16:9)")
+  -> res1_latent -> KSampler
 
-Resolution Selector Plus v2 (res1_model: SDXL, res1_aspect_ratio: 1:1, res1_megapixels: 1.0,
-  res2_model: Qwen-Image 2.1, res2_aspect_ratio: 9:16, res2_megapixels: 0.5,
-  res2_resolution: chosen portrait candidate)
+Resolution Selector Plus (res1_model: SDXL, res1_aspect_ratio: "1:1 (Square)", res1_megapixels: 1.0,
+  res1_resolution: "1024x1024 (1:1)", res2_model: Qwen-Image 2.1,
+  res2_aspect_ratio: "9:16 (Portrait Widescreen)", res2_megapixels: 0.5,
+  res2_resolution: "512x896 (9:16)")
   -> res1_width / res1_height / res1_latent for the square branch
   -> res2_width / res2_height / res2_latent for the portrait branch
 ```
 
-## Legacy: Resolution Selector Plus (deprecated)
+## Resolution Selector Plus (Legacy)
 
-![Resolution Selector Plus (deprecated) node](node_preview_v1.png)
+![Resolution Selector Plus (Legacy) node](node_preview_v1.png)
 
-The original `ResolutionSelectorPlus` node remains available for saved workflows. Its inputs and six outputs work as before.
+The legacy node remains available for saved workflows. Its inputs and six outputs work as before. Use Resolution Selector Plus for new workflows.
 
-**Add Node:** `Add Node > utils > Resolution Selector Plus (deprecated)`
+**Add Node:** `Add Node > utils > Resolution Selector Plus (Legacy)`
 
 **Inputs:**
-- `model` (dropdown) - Select your image generation model or "All" for all resolutions
+- `model` (dropdown) - Select an installed image model or "All" for all resolutions. Existing names and presets remain; newly discovered models list the All presets that their best multiple divides.
 - `resolution` (dropdown) - Choose from model-optimized presets with aspect ratios (e.g., "1920x1080 (16:9 Landscape)")
 - `resolution_multiplier` (dropdown) - Multiply preset resolution (1x, 2x, 3x, 4x)
 - `batch_size` (number) - Number of latent samples to generate (1-64, default: 1)
@@ -124,21 +160,21 @@ The original `ResolutionSelectorPlus` node remains available for saved workflows
 
 **Basic preset with multiplier:**
 ```
-Resolution Selector Plus (model: SDXL, resolution: "1024x1024 (1:1 Square)", multiplier: 2x)
+Resolution Selector Plus (Legacy) (model: SDXL, resolution: "1024x1024    (1:1 Square)", resolution_multiplier: 2x)
   -> width: 2048, height: 2048
   -> latent -> KSampler
 ```
 
 **Custom dimensions with independent multiplier:**
 ```
-Resolution Selector Plus (custom_width: 1024, custom_height: 768, custom_multiplier: 2x)
+Resolution Selector Plus (Legacy) (custom_width: 1024, custom_height: 768, custom_multiplier: 2x)
   -> custom_width: 2048, custom_height: 1536
   -> custom_latent -> KSampler
 ```
 
 **Using "All" model option:**
 ```
-Resolution Selector Plus (model: All, resolution: "1920x1080 (16:9 Landscape)")
+Resolution Selector Plus (Legacy) (model: All, resolution: "1920x1080    (16:9 Landscape)")
   -> Shows all 76 unique resolutions from all models
 ```
 

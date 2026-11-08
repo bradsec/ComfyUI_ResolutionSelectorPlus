@@ -11,6 +11,40 @@ from nodes import ResolutionSelectorV2, calculate_aspect_ratio, get_v2_resolutio
 
 
 class TestResolutionSelectorV2(unittest.TestCase):
+    def test_named_ratio_order_and_bare_compatibility(self):
+        from nodes import V2_RATIOS
+        test_resolution_selector.MockTorch.zeros = staticmethod(lambda shape, **kwargs: tuple(shape))
+        expected = ['1:1 (Square)', '5:4 (Large Format)', '4:3 (Standard)',
+                    '3:4 (Portrait Standard)', '3:2 (Photo)', '2:3 (Portrait Photo)',
+                    '16:10 (Widescreen Monitor)', '5:8 (Portrait Widescreen Monitor)',
+                    '16:9 (Widescreen)', '9:16 (Portrait Widescreen)',
+                    '2:1 (Univisium)', '1:2 (Portrait Univisium)',
+                    '21:9 (Ultrawide)', '12:5 (Cinemascope)',
+                    '5:12 (Portrait Cinemascope)', '3:1 (Panorama)',
+                    '1:3 (Portrait Panorama)']
+        self.assertEqual(list(V2_RATIOS), expected)
+        self.assertEqual(ResolutionSelectorV2.INPUT_TYPES()['required']['res1_aspect_ratio'][1]['default'], expected[0])
+        for named in expected:
+            bare = named.split(' ')[0]
+            self.assertEqual(get_v2_resolutions(named, '1.0'), get_v2_resolutions(bare, '1.0'))
+            label = get_v2_resolutions(named, '1.0')[0]
+            self.assertEqual(ResolutionSelectorV2().select_resolutions('SDXL', bare, '1.0', label, 8)[:2],
+                             ResolutionSelectorV2().select_resolutions('SDXL', named, '1.0', label, 8)[:2])
+
+    def test_user_facing_names_and_tooltips(self):
+        from nodes import NODE_DISPLAY_NAME_MAPPINGS, ResolutionSelector, OUTPUT_TIPS
+        self.assertEqual(NODE_DISPLAY_NAME_MAPPINGS['ResolutionSelectorPlusV2'], 'Resolution Selector Plus')
+        self.assertEqual(NODE_DISPLAY_NAME_MAPPINGS['ResolutionSelectorPlus'], 'Resolution Selector Plus (Legacy)')
+        strings = [*OUTPUT_TIPS.values()]
+        for cls in (ResolutionSelector, ResolutionSelectorV2):
+            self.assertTrue(cls.DESCRIPTION)
+            strings.append(cls.DESCRIPTION)
+            strings.extend(cls.OUTPUT_TOOLTIPS)
+            for group in cls.INPUT_TYPES().values():
+                strings.extend(settings['tooltip'] for _, settings in group.values() if 'tooltip' in settings)
+        for value in strings:
+            self.assertNotRegex(value, r'(?i)v2|(?<![\w:])\d+:\d+(?! \()')
+
     def test_legacy_default_is_listed(self):
         from nodes import ResolutionSelector
         choices, settings = ResolutionSelector.INPUT_TYPES()['required']['resolution']
@@ -35,7 +69,7 @@ class TestResolutionSelectorV2(unittest.TestCase):
                 self.assertLessEqual(len(labels), 3)
                 self.assertEqual(len(labels), len(set(labels)))
                 for label in labels:
-                    self.assertEqual(calculate_aspect_ratio(*parse_resolution_string(label)), ratio)
+                    self.assertEqual(calculate_aspect_ratio(*parse_resolution_string(label)), ratio.split(' ')[0])
                 self.assertTrue(set(labels) <= set(inputs["required"]["res1_resolution"][0]))
         for ratio, mp in (("21:9", "1.0"), ("16:9", "0.5")):
             with self.subTest(ratio=ratio, megapixels=mp):
@@ -105,16 +139,16 @@ class TestResolutionSelectorV2(unittest.TestCase):
 
     def test_model_fallback_matches_runtime_format(self):
         from nodes import V2_MODELS, load_v2_model_formats
+        from model_discovery import discover_models, snapshot_classes
         expected = ['SD 1.5', 'SDXL', 'SD3', 'Flux.1', 'Flux.2', 'Chroma', 'Z-Image',
                     'Qwen-Image', 'Qwen-Image 2.1', 'HiDream', 'HunyuanImage 2.1', 'Other (4ch /8)']
-        self.assertEqual(list(V2_MODELS), expected)
+        self.assertEqual(list(V2_MODELS)[:11], expected[:11])
+        self.assertEqual(list(V2_MODELS)[-1], expected[-1])
+        self.assertEqual(V2_MODELS, discover_models(snapshot_classes()))
         expected_formats = [(4, 8, 4), (4, 8, 4), (16, 8, 4), (16, 8, 4),
                             (128, 16, 4), (16, 8, 4), (16, 8, 4), (16, 8, 5),
                             (64, 16, 4), (16, 8, 4), (64, 32, 4), (4, 8, 4)]
-        self.assertEqual([entry[1] for entry in V2_MODELS.values()], expected_formats)
-        script = "import {BEST_MULTIPLES} from './js/resolution_selector_v2_core.js'; console.log(JSON.stringify(BEST_MULTIPLES))"
-        js_multiples = json.loads(subprocess.check_output(['node', '--input-type=module', '-e', script], text=True))
-        self.assertEqual(js_multiples, {model: best for model, (_, _, best) in V2_MODELS.items()})
+        self.assertEqual([V2_MODELS[label][1] for label in expected], expected_formats)
         classes = {}
         for class_name, (channels, downscale, rank), _ in V2_MODELS.values():
             classes[class_name] = type(class_name, (), {'latent_channels': channels,
@@ -122,9 +156,108 @@ class TestResolutionSelectorV2(unittest.TestCase):
         fake = types.ModuleType('comfy.latent_formats')
         fake.__dict__.update(classes)
         with patch.dict(sys.modules, {'comfy.latent_formats': fake}), patch.object(sys.modules['comfy'], 'latent_formats', fake, create=True):
-            self.assertEqual(list(load_v2_model_formats().values()), expected_formats)
+            self.assertEqual([load_v2_model_formats()[label] for label in expected], expected_formats)
             fake.SDXL.latent_channels = 7
             self.assertEqual(load_v2_model_formats()['SDXL'], (7, 8, 4))
+
+    def test_discovery_filters_and_unknown_class(self):
+        from model_discovery import discover_models, snapshot_classes
+        classes = snapshot_classes()
+        latent = type('FutureFormat', (), {'latent_channels': 6,
+            'spacial_downscale_ratio': 16, 'latent_dimensions': 2})
+        future = type('FutureImage', (), {'latent_format': latent})
+        alias = type('SD15', (), {'latent_format': classes[3].latent_format})
+        fake = types.ModuleType('comfy.supported_models')
+        fake.models = [*classes, future, alias]
+        with patch.dict(sys.modules, {'comfy.supported_models': fake}):
+            result = discover_models()
+        self.assertEqual(result['FutureImage'], ('FutureFormat', (6, 16, 4), 16))
+        for ratio, best in ((1, 8), (4, 8), (8, 8), (12, 16), (32, 32), (128, 64)):
+            pixel = type('Fmt', (), {'latent_channels': 3, 'spacial_downscale_ratio': ratio,
+                                     'latent_dimensions': 2})
+            odd = type('FuturePixel', (), {'latent_format': pixel})
+            self.assertEqual(discover_models([odd])['FuturePixel'][2], best, ratio)
+        self.assertEqual(list(result).count('SD 1.5'), 1)
+        self.assertNotIn('LotusD', result)
+        self.assertNotIn('TripoSplat', result)
+        self.assertIn('Ming-Image', result)
+        self.assertIn('Anima', result)
+        self.assertLess(list(result).index('FutureImage'), list(result).index('Other (4ch /8)'))
+
+    def test_curated_labels_backfill_from_snapshot(self):
+        from model_discovery import FRIENDLY, RELEASED, discover_models, snapshot_classes
+        classes = [cls for cls in snapshot_classes() if cls.__name__ not in ('Flux3', 'Krea2', 'Flux2')]
+        result = discover_models(classes)
+        for label in ('Flux.3', 'Krea 2', 'Flux.2'):
+            self.assertIn(label, result)
+        self.assertEqual(result, discover_models(snapshot_classes()))
+        for label in (*(l for l, _ in RELEASED.values()), *FRIENDLY.values()):
+            self.assertIn(label, result)
+
+    def test_snapshot_not_read_when_live_models_are_complete(self):
+        import model_discovery
+        classes = model_discovery.snapshot_classes()
+        with patch.object(model_discovery, 'snapshot_classes', side_effect=AssertionError('read')):
+            model_discovery.discover_models(classes)
+
+    def test_researched_labels_multiples_and_aliases(self):
+        from model_discovery import BEST_MULTIPLES, FRIENDLY, discover_models, snapshot_classes
+        models = discover_models(snapshot_classes())
+        self.assertEqual(len(models), 42)
+        self.assertNotIn('PiD', models)
+        for name, label in FRIENDLY.items():
+            self.assertIn(label, models, name)
+        for label in ('Hunyuan-DiT', 'KOALA'):
+            self.assertEqual(list(models).count(label), 1)
+        for label, best in (('Krea 2', 16), ('HiDream-O1', 32),
+                            ('Lumina Image 2.0', 16), ('KOALA', 8)):
+            self.assertEqual(models[label][2], best)
+        self.assertEqual(models['Qwen-Image 2.1'][2], BEST_MULTIPLES['QwenImage21'])
+
+    def test_legacy_new_models_use_all_and_model_latents(self):
+        from nodes import ResolutionSelector, get_all_resolutions, format_resolution
+        test_resolution_selector.MockTorch.zeros = staticmethod(lambda shape, **kwargs: tuple(shape))
+        models = ResolutionSelector.INPUT_TYPES()['required']['model'][0]
+        self.assertEqual(models[:6], ['All', 'Flux', 'Qwen Image', 'Z-Image', 'SD 1.5', 'SDXL'])
+        self.assertIn('HunyuanImage 2.1', models)
+        label = format_resolution(1024, 1024)
+        self.assertIn(label, get_all_resolutions())
+        result = ResolutionSelector().select_resolution('HunyuanImage 2.1', label)
+        self.assertEqual(result[2]['samples'], (1, 64, 32, 32))
+        flux2 = ResolutionSelector().select_resolution('Flux.2', label)
+        self.assertEqual(flux2[2]['samples'], (1, 128, 64, 64))
+        qwen = ResolutionSelector().select_resolution('JoyImage', label)
+        self.assertEqual(qwen[2]['samples'], (1, 16, 1, 128, 128))
+        with self.assertRaises(ValueError):
+            ResolutionSelector().select_resolution('HunyuanImage 2.1', format_resolution(1000, 1000))
+
+    def test_validate_inputs_accepts_bare_and_named_ratios(self):
+        import inspect
+        spec = inspect.getfullargspec(ResolutionSelectorV2.VALIDATE_INPUTS)
+        self.assertIsNone(spec.varkw)  # **kwargs would skip the combo check for every input
+        self.assertEqual([n for n in spec.args if n != 'cls'],
+                         [f'res{slot}_aspect_ratio' for slot in range(1, 5)])
+        validate = ResolutionSelectorV2.VALIDATE_INPUTS
+        self.assertIs(validate(res1_aspect_ratio='16:9'), True)
+        self.assertIs(validate(res1_aspect_ratio='16:9 (Widescreen)', res3_aspect_ratio='1:3'), True)
+        self.assertIs(validate(), True)
+        self.assertIsInstance(validate(res2_aspect_ratio='7:5'), str)
+        self.assertIsInstance(validate(res1_aspect_ratio='16:9 (Wrong)'), str)
+
+    def test_legacy_lists_only_presets_valid_for_discovered_models(self):
+        from nodes import ResolutionSelector, V2_MODELS, LEGACY_EQUIVALENTS, get_resolution_list, get_all_resolutions
+        test_resolution_selector.MockTorch.zeros = staticmethod(lambda shape, **kwargs: tuple(shape))
+        info = ResolutionSelector.INPUT_TYPES()['required']['model'][1]['model_info']
+        for model, (_, _, best) in V2_MODELS.items():
+            if model in LEGACY_EQUIVALENTS or model == 'Other (4ch /8)':
+                continue
+            self.assertEqual(info[model]['best_multiple'], best)
+            listed = get_resolution_list(model)
+            self.assertTrue(listed, model)
+            self.assertLessEqual(len(listed), len(get_all_resolutions()))
+            for label in listed:
+                ResolutionSelector().select_resolution(model, label)
+        self.assertLess(len(get_resolution_list('HunyuanImage 2.1')), len(get_resolution_list('SD3')))
 
     def test_v3_registration_matches_v1(self):
         class Port:
@@ -148,6 +281,8 @@ class TestResolutionSelectorV2(unittest.TestCase):
             spec.loader.exec_module(module)
         schema = module.ResolutionSelectorPlusV2V3.define_schema()
         self.assertEqual(schema.node_id, 'ResolutionSelectorPlusV2')
+        self.assertEqual(schema.display_name, 'Resolution Selector Plus')
+        self.assertEqual(schema.description, module.ResolutionSelectorV2.DESCRIPTION)
         self.assertEqual([item.id for item in schema.outputs], list(module.ResolutionSelectorV2.RETURN_NAMES))
         self.assertEqual([item.display_name for item in schema.outputs[:3]],
                          ['res1_width', 'res1_height', 'res1_latent'])
@@ -157,6 +292,12 @@ class TestResolutionSelectorV2(unittest.TestCase):
         self.assertEqual([item.display_name for item in schema.inputs[:5]],
                          ['Res 1 model', 'Res 1 aspect ratio', 'Res 1 megapixels', 'Res 1 resolution', 'Res 1 multiple'])
         old = module.ResolutionSelectorPlusV3.define_schema()
+        self.assertEqual(old.display_name, 'Resolution Selector Plus (Legacy)')
+        self.assertEqual(old.description, module.ResolutionSelector.DESCRIPTION)
+        for node_schema in (schema, old):
+            for item in (*node_schema.inputs, *node_schema.outputs):
+                if getattr(item, 'tooltip', None):
+                    self.assertNotRegex(item.tooltip, r'(?i)v2|(?<![\w:])\d+:\d+(?! \()')
         resolution = next(item for item in old.inputs if item.name == 'resolution')
         self.assertIn(resolution.default, resolution.options)
         self.assertTrue(module.ResolutionSelectorPlusV3.define_schema().is_deprecated)
@@ -165,5 +306,27 @@ class TestResolutionSelectorV2(unittest.TestCase):
         self.assertIs(module.NODE_CLASS_MAPPINGS['ResolutionSelectorPlusV2'], module.ResolutionSelectorV2)
 
 
-if __name__ == "__main__":
+
+
+class TestPackageImport(unittest.TestCase):
+    def test_imports_as_a_package_like_comfyui(self):
+        # ComfyUI loads custom nodes as packages; plain-module imports inside them fail there.
+        import os
+        root = os.path.dirname(os.path.abspath(__file__))
+        spec = importlib.util.spec_from_file_location(
+            'rsp_pkg_under_test', os.path.join(root, '__init__.py'), submodule_search_locations=[root])
+        package = importlib.util.module_from_spec(spec)
+        sys.modules['rsp_pkg_under_test'] = package
+        saved_path = list(sys.path)
+        sys.path[:] = [p for p in sys.path if os.path.abspath(p or '.') != root]
+        try:
+            spec.loader.exec_module(package)
+        finally:
+            sys.path[:] = saved_path
+            for name in [n for n in sys.modules if n.startswith('rsp_pkg_under_test')]:
+                del sys.modules[name]
+        self.assertIn('ResolutionSelectorPlusV2', package.NODE_CLASS_MAPPINGS)
+
+
+if __name__ == '__main__':
     unittest.main()

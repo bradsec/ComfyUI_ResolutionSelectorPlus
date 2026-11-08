@@ -127,13 +127,19 @@ function getAllResolutions() {
     return sorted.map(({ width, height }) => formatResolution(width, height));
 }
 
-function getResolutionsForModel(model) {
+function getResolutionsForModel(model, modelInfo = {}) {
     if (model === "All") {
         return getAllResolutions();
     }
 
     const modelData = MODEL_RESOLUTIONS[model];
-    if (!modelData) return [];
+    if (!modelData) {
+        // Discovered model: All list limited to presets its best multiple divides.
+        const best = modelInfo[model]?.best_multiple;
+        if (!best) return getAllResolutions();
+        return getAllResolutions().filter(label =>
+            (label.match(/^(\d+)x(\d+)/) ?? []).slice(1).every(side => Number(side) % best === 0));
+    }
 
     const resolutions = [];
     for (const category of ["square", "portrait", "landscape"]) {
@@ -184,9 +190,11 @@ app.registerExtension({
         }
 
         const origCallback = modelWidget.callback;
+        const modelInfo = node.constructor.nodeData?.input?.required?.model?.[1]?.model_info
+            || modelWidget.options?.model_info || {};
 
         const updateResolutions = (modelValue) => {
-            const resolutions = getResolutionsForModel(modelValue);
+            const resolutions = getResolutionsForModel(modelValue, modelInfo);
 
             if (resolutions.length === 0) {
                 console.warn(`ResolutionSelector: No resolutions found for model ${modelValue}`);
@@ -224,7 +232,9 @@ app.registerExtension({
 
         const modelWidget = node.widgets.find(w => w.name === "model");
         if (modelWidget) {
-            const resolutions = getResolutionsForModel(modelWidget.value);
+            const modelInfo = node.constructor.nodeData?.input?.required?.model?.[1]?.model_info
+                || modelWidget.options?.model_info || {};
+            const resolutions = getResolutionsForModel(modelWidget.value, modelInfo);
             const resolutionWidget = node.widgets.find(w => w.name === "resolution");
 
             if (resolutionWidget && resolutions.length > 0) {

@@ -1,16 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getResolutions, syncSlots, install, BEST_MULTIPLES } from './resolution_selector_v2_core.js';
+import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
+import { RATIOS, getResolutions, syncSlots, install } from './resolution_selector_v2_core.js';
+
+const modelInfo = Object.fromEntries([
+    ['SD 1.5', 8], ['SDXL', 8], ['SD3', 16], ['Flux.1', 16], ['Flux.2', 16],
+    ['Chroma', 16], ['Z-Image', 16], ['Qwen-Image', 16], ['Qwen-Image 2.1', 16],
+    ['HiDream', 16], ['HunyuanImage 2.1', 32], ['Other (4ch /8)', 8],
+].map(([name, best_multiple]) => [name, { best_multiple }]));
 
 function makeNode() {
     const widgets = [];
     for (let slot = 1; slot <= 4; slot++) {
-        for (const [name, value] of [['model', 'SDXL'], ['aspect_ratio', '1:1'], ['megapixels', '1.0'],
+        for (const [name, value] of [['model', 'SDXL'], ['aspect_ratio', RATIOS[0]], ['megapixels', '1.0'],
             ['resolution', slot === 1 ? getResolutions('1:1', '1.0')[0] : 'none'], ['multiple', 8]]) {
             widgets.push({ name: `res${slot}_${name}`, value, type: 'combo', options: { values: [] } });
         }
     }
     return {
+        constructor: { nodeData: { input: { required: { res1_model: [[], { model_info: modelInfo }] } } } },
         widgets, outputs: [], removed: [], links: new Set(),
         addOutput(name, type) { this.outputs.push({ name, type, links: [] }); },
         removeOutput(index) {
@@ -37,6 +46,54 @@ test('resolution candidates are filtered and unique', () => {
     assert.equal(new Set(choices).size, choices.length);
     assert.ok(choices.every(label => label.includes('16:9')));
     assert.ok(choices.every(label => /^\d+x\d+ \(16:9\)$/.test(label)));
+});
+
+test('legacy unknown model uses All presets', () => {
+    const source = readFileSync(new URL('./resolution_selector.js', import.meta.url), 'utf8')
+        .replace(/^import .*\n/, '') + '\nglobalThis.unknown = getResolutionsForModel("FutureImage"); globalThis.all = getAllResolutions();';
+    const context = { app: { registerExtension() {} } };
+    runInNewContext(source, context);
+    assert.equal(context.unknown.length, context.all.length);
+});
+
+test('legacy discovered model lists presets its best multiple divides', () => {
+    const source = readFileSync(new URL('./resolution_selector.js', import.meta.url), 'utf8')
+        .replace(/^import .*\n/, '') + '\nglobalThis.all = getAllResolutions(); globalThis.f32 = getResolutionsForModel("Future", { Future: { best_multiple: 32 } }); globalThis.f16 = getResolutionsForModel("Future", { Future: { best_multiple: 16 } });';
+    const context = { app: { registerExtension() {} } };
+    runInNewContext(source, context);
+    const sides = label => label.match(/^(\d+)x(\d+)/).slice(1).map(Number);
+    assert.ok(context.f32.length > 0 && context.f32.length < context.f16.length);
+    assert.ok(context.f16.length < context.all.length);
+    assert.ok(context.f32.every(label => sides(label).every(side => side % 32 === 0)));
+    assert.ok(context.f16.every(label => sides(label).every(side => side % 16 === 0)));
+    assert.ok(context.all.filter(label => sides(label).every(side => side % 32 === 0)).every(label => context.f32.includes(label)));
+});
+
+test('new model metadata drives rounding without a JS model table', () => {
+    const node = makeNode();
+    node.constructor.nodeData.input.required.res1_model[1].model_info = {
+        ...modelInfo, FutureImage: { channels: 6, downscale: 16, rank: 4, best_multiple: 32 },
+    };
+    install(node);
+    change(node, 'res1_model', 'FutureImage');
+    assert.equal(widget(node, 'res1_multiple').value, 32);
+});
+
+test('onConfigure migrates every released bare ratio', () => {
+    for (const named of RATIOS) {
+        const node = makeNode();
+        const bare = named.split(' ')[0];
+        node.onConfigure = function () { widget(this, 'res1_aspect_ratio').value = bare; };
+        install(node);
+        widget(node, 'res1_resolution').value = getResolutions(named, '1.0')[0];
+        const warnings = [];
+        const previousWarn = console.warn;
+        console.warn = message => warnings.push(message);
+        try { node.onConfigure(); } finally { console.warn = previousWarn; }
+        assert.equal(widget(node, 'res1_aspect_ratio').value, named);
+        assert.deepEqual(widget(node, 'res1_resolution').options.values, getResolutions(named, '1.0'));
+        assert.deepEqual(warnings, []);
+    }
 });
 
 test('labels and size follow visible slots', () => {
@@ -82,10 +139,10 @@ test('ratio and megapixels filter options, retaining valid and resetting invalid
     install(node);
     const resolution = widget(node, 'res1_resolution');
     const valid = getResolutions('16:9', '1.0')[1];
-    change(node, 'res1_aspect_ratio', '16:9');
+    change(node, 'res1_aspect_ratio', '16:9 (Widescreen)');
     assert.deepEqual(resolution.options.values, getResolutions('16:9', '1.0'));
     change(node, 'res1_resolution', valid);
-    change(node, 'res1_aspect_ratio', '16:9');
+    change(node, 'res1_aspect_ratio', '16:9 (Widescreen)');
     assert.equal(resolution.value, valid);
     change(node, 'res1_megapixels', '2.0');
     assert.deepEqual(resolution.options.values, getResolutions('16:9', '2.0'));
@@ -179,7 +236,8 @@ test('onConfigure repairs shifted values without losing saved outputs', () => {
         saved[10] = 'bad model';
         assert.doesNotThrow(() => node.onConfigure({ widgets_values: saved }));
         assert.deepEqual(node.widgets.slice(0, 5).map(item => item.value),
-            ['SDXL', '1:1', '1.0', getResolutions('1:1', '1.0')[0], 8]);
+            ['SDXL', RATIOS[0], '1.0', getResolutions('1:1', '1.0')[0], 8]);
+        assert.equal(widget(node, 'res2_aspect_ratio').value, '16:9 (Widescreen)');
         assert.equal(widget(node, 'res2_multiple').value, 64);
         assert.equal(widget(node, 'res3_model').value, 'SDXL');
         assert.equal(node.outputs[3].links[0], 42);
@@ -203,5 +261,5 @@ test('slot 2 model change uses best multiple without changing other slots or sav
     widget(node, 'res2_multiple').value = 64;
     node.onConfigure?.({});
     assert.equal(widget(node, 'res2_multiple').value, 64);
-    assert.equal(Object.keys(BEST_MULTIPLES).length, 12);
+    assert.equal(Object.keys(modelInfo).length, 12);
 });

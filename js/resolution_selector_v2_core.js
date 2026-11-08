@@ -1,17 +1,18 @@
-export const RATIOS = ['1:1', '5:4', '4:3', '3:2', '16:10', '16:9', '2:1', '21:9', '12:5', '3:1',
-    '3:4', '2:3', '5:8', '9:16', '1:2', '5:12', '1:3'];
+export const RATIOS = ['1:1 (Square)', '5:4 (Large Format)', '4:3 (Standard)',
+    '3:4 (Portrait Standard)', '3:2 (Photo)', '2:3 (Portrait Photo)',
+    '16:10 (Widescreen Monitor)', '5:8 (Portrait Widescreen Monitor)',
+    '16:9 (Widescreen)', '9:16 (Portrait Widescreen)', '2:1 (Univisium)',
+    '1:2 (Portrait Univisium)', '21:9 (Ultrawide)', '12:5 (Cinemascope)',
+    '5:12 (Portrait Cinemascope)', '3:1 (Panorama)', '1:3 (Portrait Panorama)'];
+const BARE_RATIOS = RATIOS.map(name => name.split(' ')[0]);
 export const MEGAPIXELS = ['0.25', '0.5', '1.0', '1.5', '2.0', '4.0'];
-export const BEST_MULTIPLES = {
-    'SD 1.5': 8, SDXL: 8, SD3: 16, 'Flux.1': 16, 'Flux.2': 16, Chroma: 16,
-    'Z-Image': 16, 'Qwen-Image': 16, 'Qwen-Image 2.1': 16, HiDream: 16,
-    'HunyuanImage 2.1': 32, 'Other (4ch /8)': 8,
-};
-const APPROX = [1, 1.25, 1.33, 1.5, 1.6, 1.78, 2, 2.35, 2.4, 3,
-    0.75, 0.67, 0.625, 0.56, 0.5, 0.42, 0.33];
+const APPROX = [1, 1.25, 1.33, 0.75, 1.5, 0.67, 1.6, 0.625, 1.78, 0.56,
+    2, 0.5, 2.35, 2.4, 0.42, 3, 0.33];
 
 export function getResolutions(ratio, megapixels) {
-    if (!RATIOS.includes(ratio) || !MEGAPIXELS.includes(megapixels)) throw new Error('Unsupported ratio or megapixels');
-    const [numerator, denominator] = ratio.split(':').map(Number);
+    const bare = RATIOS.includes(ratio) ? ratio.split(' ')[0] : ratio;
+    if (!BARE_RATIOS.includes(bare) || !MEGAPIXELS.includes(megapixels)) throw new Error('Unsupported ratio or megapixels');
+    const [numerator, denominator] = bare.split(':').map(Number);
     const value = numerator / denominator;
     const choices = [];
     for (const scale of [0.9, 1, 1.1]) {
@@ -21,11 +22,11 @@ export function getResolutions(ratio, megapixels) {
             const height = Math.max(64, Math.floor(Math.sqrt(pixels / value) / snap + 0.5) * snap);
             const actual = width / height;
             let index = 0;
-            for (let i = 1; i < RATIOS.length; i++) {
+            for (let i = 1; i < BARE_RATIOS.length; i++) {
                 if (Math.abs(actual - APPROX[i]) < Math.abs(actual - APPROX[index])) index = i;
             }
-            if (RATIOS[index] !== ratio) continue;
-            const label = `${width}x${height} (${RATIOS[index]})`;
+            if (BARE_RATIOS[index] !== bare) continue;
+            const label = `${width}x${height} (${bare})`;
             if (!choices.includes(label)) choices.push(label);
             break;
         }
@@ -58,11 +59,13 @@ export function install(node) {
     if (node._resolutionSelectorV2Installed) return;
     node._resolutionSelectorV2Installed = true;
     const widget = name => node.widgets?.find(item => item.name === name);
+    const modelInfo = node.constructor.nodeData?.input?.required?.res1_model?.[1]?.model_info
+        || widget('res1_model')?.options?.model_info || {};
     const repair = (item, values, fallback) => {
         if (item && !values.includes(item.value)) {
             item.value = fallback;
             if (!node._resolutionSelectorV2Warned) {
-                console.warn('Resolution Selector Plus v2: invalid saved widget value; using defaults');
+                console.warn('Resolution Selector Plus: invalid saved widget value; using defaults');
                 node._resolutionSelectorV2Warned = true;
             }
         }
@@ -71,8 +74,8 @@ export function install(node) {
         for (let slot = 1; slot <= 4; slot++) {
             const resolution = widget(`res${slot}_resolution`);
             if (!resolution) continue;
-            repair(widget(`res${slot}_model`), Object.keys(BEST_MULTIPLES), 'SDXL');
-            repair(widget(`res${slot}_aspect_ratio`), RATIOS, '1:1');
+            repair(widget(`res${slot}_model`), Object.keys(modelInfo), 'SDXL');
+            repair(widget(`res${slot}_aspect_ratio`), RATIOS, RATIOS[0]);
             repair(widget(`res${slot}_megapixels`), MEGAPIXELS, '1.0');
             repair(widget(`res${slot}_multiple`), [8, 16, 32, 64], 8);
             const choices = getResolutions(widget(`res${slot}_aspect_ratio`).value,
@@ -116,13 +119,18 @@ export function install(node) {
         const previous = model.callback;
         model.callback = function (...args) {
             previous?.apply(this, args);
-            widget(`res${slot}_multiple`).value = BEST_MULTIPLES[model.value];
+            widget(`res${slot}_multiple`).value = modelInfo[model.value]?.best_multiple ?? 8;
             refresh();
         };
     }
     const previousConfigure = node.onConfigure;
     node.onConfigure = function (...args) {
         const result = previousConfigure?.apply(this, args);
+        for (let slot = 1; slot <= 4; slot++) {
+            const ratio = widget(`res${slot}_aspect_ratio`);
+            const index = BARE_RATIOS.indexOf(ratio?.value);
+            if (index >= 0) ratio.value = RATIOS[index];
+        }
         refresh(true, false);
         return result;
     };

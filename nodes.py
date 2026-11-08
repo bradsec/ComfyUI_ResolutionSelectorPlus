@@ -2,6 +2,11 @@ import math
 import torch
 
 try:
+    from .model_discovery import discover_models
+except ImportError:  # loaded as a plain module (unit tests)
+    from model_discovery import discover_models
+
+try:
     import comfy.model_management
     COMFY_AVAILABLE = True
 except ImportError:
@@ -126,6 +131,12 @@ def get_resolution_list(model_name):
     """
     if model_name == "All":
         return get_all_resolutions()
+    if model_name in V2_MODELS and model_name not in LEGACY_EQUIVALENTS:
+        # Discovered models use the All list limited to presets their best
+        # multiple divides, the same rule _validate_dimensions enforces.
+        best = V2_MODELS[model_name][2]
+        return [label for label in get_all_resolutions()
+                if all(side % best == 0 for side in parse_resolution_string(label))]
 
     if model_name not in MODEL_RESOLUTIONS:
         return []
@@ -171,7 +182,7 @@ def get_default_resolution(model_name):
 
 def get_latent_channels(model_name):
     """
-    Return the latent channel count for a model.
+    Return the latent channel count for a model, including discovered models.
 
     SD 1.5 and SDXL use 4-channel latents. Flux, Qwen Image, and Z-Image use
     16-channel latents. A wrong channel count makes the LATENT output unusable
@@ -184,8 +195,10 @@ def get_latent_channels(model_name):
         model_name (str): Model name, or "All".
 
     Returns:
-        int: Latent channel count (4 or 16).
+        int: Latent channel count.
     """
+    if model_name in V2_MODELS and model_name not in LEGACY_EQUIVALENTS:
+        return V2_MODEL_FORMATS[model_name][0]
     model_data = MODEL_RESOLUTIONS.get(model_name)
     if model_data:
         return model_data["constraints"].get("latent_channels", 4)
@@ -249,7 +262,7 @@ def parse_resolution_string(resolution_str):
 
 
 # Tooltips (shared by both API wrappers).
-TIP_MODEL  = "Image model. Filters the resolution presets to that model's recommended sizes. 'All' shows every preset."
+TIP_MODEL  = "Image model. Existing models keep their presets; discovered models and 'All' show every preset."
 TIP_RESOLUTION = "Preset resolution. The list filters to the selected model."
 TIP_MULT   = "Multiplies the preset width and height (1x to 4x)."
 TIP_BATCH  = "Number of latent samples in the preset latent batch."
@@ -273,6 +286,7 @@ class ResolutionSelector:
     Enhanced resolution selector supporting multiple image generation models.
     Provides model-specific resolution presets, custom dimension inputs, and empty latent output.
     """
+    DESCRIPTION = "Resolution Selector Plus (Legacy): preset sizes and custom latents. Use Resolution Selector Plus for new workflows."
 
     def __init__(self):
         """Initialize device for latent tensor generation."""
@@ -289,7 +303,8 @@ class ResolutionSelector:
         Returns:
             dict: Input configuration with required and optional fields
         """
-        model_list = ["All"] + list(MODEL_RESOLUTIONS.keys())
+        model_list = ["All"] + list(MODEL_RESOLUTIONS) + [name for name in V2_MODELS
+                                                         if name not in LEGACY_EQUIVALENTS and name != "Other (4ch /8)"]
 
         # Get all possible resolutions across all models (JavaScript will filter dynamically)
         all_resolutions = get_all_resolutions()
@@ -299,6 +314,8 @@ class ResolutionSelector:
                 "model": (model_list, {
                     "default": "SDXL",
                     "tooltip": TIP_MODEL,
+                    "model_info": {name: {"best_multiple": V2_MODELS[name][2]} for name in model_list
+                                   if name in V2_MODELS and name not in LEGACY_EQUIVALENTS},
                 }),
                 "resolution": (all_resolutions, {
                     "default": format_resolution(1024, 1024),
@@ -351,6 +368,7 @@ class ResolutionSelector:
 
     RETURN_TYPES = ("INT", "INT", "LATENT", "INT", "INT", "LATENT")
     RETURN_NAMES = ("width", "height", "latent", "custom_width", "custom_height", "custom_latent")
+    OUTPUT_TOOLTIPS = tuple(OUTPUT_TIPS[name] for name in RETURN_NAMES)
     FUNCTION = "select_resolution"
     CATEGORY = "utils"
 
@@ -393,7 +411,7 @@ class ResolutionSelector:
         channels = get_latent_channels(model)
 
         # Generate latent for preset resolution with batch size
-        latent = self._generate_empty_latent(width, height, batch_size, channels)
+        latent = self._generate_model_latent(model, width, height, batch_size, channels)
 
         # Determine final custom dimensions
         if custom_width > 0 and custom_height > 0:
@@ -407,13 +425,13 @@ class ResolutionSelector:
             self._validate_dimensions(model, final_custom_width, final_custom_height)
 
             # Generate custom latent with custom batch size
-            custom_latent = self._generate_empty_latent(final_custom_width, final_custom_height, custom_batch, channels)
+            custom_latent = self._generate_model_latent(model, final_custom_width, final_custom_height, custom_batch, channels)
 
             return (width, height, latent, final_custom_width, final_custom_height, custom_latent)
         else:
             # No custom dimensions: return zeros and a minimal VALID latent (8x8 -> 1x1
             # in latent space), never a zero-size [B,C,0,0] tensor.
-            custom_latent = self._generate_empty_latent(8, 8, 1, channels)
+            custom_latent = self._generate_model_latent(model, 8, 8, 1, channels)
 
             return (width, height, latent, 0, 0, custom_latent)
 
@@ -429,7 +447,9 @@ class ResolutionSelector:
         Raises:
             ValueError: If dimensions violate model constraints
         """
-        if model in MODEL_RESOLUTIONS:
+        if model in V2_MODELS and model not in LEGACY_EQUIVALENTS:
+            constraints = {"divisible_by": V2_MODELS[model][2], "min": 64, "max": 4096}
+        elif model in MODEL_RESOLUTIONS:
             constraints = MODEL_RESOLUTIONS[model]["constraints"]
         else:
             # "All" or unknown model: enforce the generic latent requirement so
@@ -489,28 +509,24 @@ class ResolutionSelector:
 
         return {"samples": latent_tensor}
 
+    def _generate_model_latent(self, model, width, height, batch_size, channels):
+        if model not in V2_MODELS or model in LEGACY_EQUIVALENTS:
+            return self._generate_empty_latent(width, height, batch_size, channels)
+        _, downscale, rank = V2_MODEL_FORMATS[model]
+        shape = [batch_size, channels, max(1, height // downscale), max(1, width // downscale)]
+        if rank == 5:
+            shape.insert(2, 1)
+        kwargs = {"device": self.device}
+        if model == "SD3" and COMFY_AVAILABLE:
+            kwargs["dtype"] = comfy.model_management.intermediate_dtype()
+        return {"samples": torch.zeros(shape, **kwargs), "downscale_ratio_spacial": downscale}
 
-# Format: comfy.latent_formats class, fallback channels/downscale/rank, best pixel multiple.
-# Sources: comfy/latent_formats.py:6-13,25,37,123-124,165-166,197-199,729-732,891-894,965-968.
-# Patch sources: comfy/model_detection.py:290-306 (Flux.1/Flux.2),760 (Wan21);
-# comfy/model_detection.py:300,595,871 (Chroma, Z-Image, HiDream),760 (Wan21).
-# SD3: patch size 2 (diffusers SD3Transformer2DModel config; ComfyUI reads it from the checkpoint, comfy/model_detection.py:57).
-# Qwen-Image 2.1, HunyuanImage 2.1:
-# checkpoint patch size is unverified; best multiple falls back to downscale.
-V2_MODELS = {
-    "SD 1.5": ("SD15", (4, 8, 4), 8),
-    "SDXL": ("SDXL", (4, 8, 4), 8),
-    "SD3": ("SD3", (16, 8, 4), 16),
-    "Flux.1": ("Flux", (16, 8, 4), 16),
-    "Flux.2": ("Flux2", (128, 16, 4), 16),
-    "Chroma": ("Flux", (16, 8, 4), 16),
-    "Z-Image": ("Flux", (16, 8, 4), 16),
-    "Qwen-Image": ("Wan21", (16, 8, 5), 16),
-    "Qwen-Image 2.1": ("QwenImage21", (64, 16, 4), 16),
-    "HiDream": ("Flux", (16, 8, 4), 16),
-    "HunyuanImage 2.1": ("HunyuanImage21", (64, 32, 4), 32),
-    "Other (4ch /8)": ("SD15", (4, 8, 4), 8),
-}
+
+# label -> (comfy.latent_formats class, fallback (channels, downscale, rank), best pixel multiple).
+# Built by model_discovery.discover_models(); sources, confidence and the
+# include/exclude rules are documented in model_discovery.py.
+V2_MODELS = discover_models()
+LEGACY_EQUIVALENTS = {"Flux.1", "Qwen-Image", "Z-Image", "SD 1.5", "SDXL"}
 
 
 def load_v2_model_formats():
@@ -527,15 +543,22 @@ def load_v2_model_formats():
 
 
 V2_MODEL_FORMATS = load_v2_model_formats()
-V2_RATIOS = ("1:1", "5:4", "4:3", "3:2", "16:10", "16:9", "2:1", "21:9", "12:5", "3:1",
-             "3:4", "2:3", "5:8", "9:16", "1:2", "5:12", "1:3")
+V2_RATIOS = ("1:1 (Square)", "5:4 (Large Format)", "4:3 (Standard)",
+             "3:4 (Portrait Standard)", "3:2 (Photo)", "2:3 (Portrait Photo)",
+             "16:10 (Widescreen Monitor)", "5:8 (Portrait Widescreen Monitor)",
+             "16:9 (Widescreen)", "9:16 (Portrait Widescreen)", "2:1 (Univisium)",
+             "1:2 (Portrait Univisium)", "21:9 (Ultrawide)", "12:5 (Cinemascope)",
+             "5:12 (Portrait Cinemascope)", "3:1 (Panorama)", "1:3 (Portrait Panorama)")
+V2_RATIO_BY_BARE = {name.split(" ", 1)[0]: name for name in V2_RATIOS}
 V2_MEGAPIXELS = ("0.25", "0.5", "1.0", "1.5", "2.0", "4.0")
 V2_MULTIPLES = (8, 16, 32, 64)
 
 
 def get_v2_resolutions(aspect_ratio, megapixels):
-    if aspect_ratio not in V2_RATIOS or megapixels not in V2_MEGAPIXELS:
+    named = V2_RATIO_BY_BARE.get(aspect_ratio, aspect_ratio)
+    if named not in V2_RATIOS or megapixels not in V2_MEGAPIXELS:
         raise ValueError("Unsupported aspect ratio or megapixels")
+    aspect_ratio = named.split(" ", 1)[0]
     numerator, denominator = map(int, aspect_ratio.split(":"))
     ratio = numerator / denominator
     choices = []
@@ -553,6 +576,17 @@ def get_v2_resolutions(aspect_ratio, megapixels):
 
 
 class ResolutionSelectorV2(ResolutionSelector):
+    DESCRIPTION = "Resolution Selector Plus: choose a discovered image model, named aspect ratio, megapixels and rounding multiple for up to four latent outputs."
+    @classmethod
+    def VALIDATE_INPUTS(cls, res1_aspect_ratio=None, res2_aspect_ratio=None,
+                        res3_aspect_ratio=None, res4_aspect_ratio=None):
+        # ComfyUI skips the combo check for inputs named here, so v2.2.0 API
+        # prompts with bare ratios ("16:9") validate. Other inputs keep the check.
+        for ratio in (res1_aspect_ratio, res2_aspect_ratio, res3_aspect_ratio, res4_aspect_ratio):
+            if ratio is not None and ratio not in V2_RATIOS and ratio not in V2_RATIO_BY_BARE:
+                return f"Unsupported aspect ratio: {ratio!r}"
+        return True
+
     @classmethod
     def INPUT_TYPES(cls):
         all_choices = list(dict.fromkeys(label for ratio in V2_RATIOS for mp in V2_MEGAPIXELS
@@ -561,17 +595,27 @@ class ResolutionSelectorV2(ResolutionSelector):
         optional = {}
         for slot in range(1, 5):
             target = required if slot == 1 else optional
-            target[f"res{slot}_model"] = (list(V2_MODELS), {"default": "SDXL"})
-            target[f"res{slot}_aspect_ratio"] = (list(V2_RATIOS), {"default": "1:1"})
-            target[f"res{slot}_megapixels"] = (list(V2_MEGAPIXELS), {"default": "1.0"})
+            target[f"res{slot}_model"] = (list(V2_MODELS), {"default": "SDXL",
+                "tooltip": "Discovered ComfyUI image model. Sets latent shape and the suggested rounding multiple; saved overrides remain.",
+                "model_info": {label: {"channels": fmt[0], "downscale": fmt[1],
+                                       "rank": fmt[2], "best_multiple": V2_MODELS[label][2]}
+                               for label, fmt in V2_MODEL_FORMATS.items()}})
+            target[f"res{slot}_aspect_ratio"] = (list(V2_RATIOS), {"default": "1:1 (Square)",
+                                                  "tooltip": "Named aspect ratio, such as 16:9 (Widescreen)."})
+            target[f"res{slot}_megapixels"] = (list(V2_MEGAPIXELS), {"default": "1.0",
+                                                "tooltip": "Target image size in megapixels; selects nearby resolution candidates."})
             target[f"res{slot}_resolution"] = ((all_choices if slot == 1 else ["none"] + all_choices),
-                                               {"default": get_v2_resolutions("1:1", "1.0")[0] if slot == 1 else "none"})
-            target[f"res{slot}_multiple"] = (list(V2_MULTIPLES), {"default": V2_MODELS["SDXL"][2]})
+                                               {"default": get_v2_resolutions("1:1 (Square)", "1.0")[0] if slot == 1 else "none",
+                                                "tooltip": "Select a resolution; later slots use none until activated."})
+            target[f"res{slot}_multiple"] = (list(V2_MULTIPLES), {"default": V2_MODELS["SDXL"][2],
+                                              "tooltip": "Pixel rounding step. Model selection suggests its best multiple; you may override it."})
         return {"required": required, "optional": optional}
 
     RETURN_TYPES = ("INT", "INT", "LATENT") * 4
     RETURN_NAMES = tuple(f"res{slot}_{kind}" for slot in range(1, 5)
                          for kind in ("width", "height", "latent"))
+    OUTPUT_TOOLTIPS = tuple(f"Resolution Selector Plus slot {slot} {kind}." for slot in range(1, 5)
+                            for kind in ("width", "height", "latent"))
     FUNCTION = "select_resolutions"
     CATEGORY = "utils"
 
@@ -598,7 +642,7 @@ class ResolutionSelectorV2(ResolutionSelector):
                 raise ValueError("Unsupported multiple or model")
             channels, downscale, rank = V2_MODEL_FORMATS[model]
             if multiple < downscale and not warned:
-                print(f"Resolution Selector Plus v2: multiple {multiple} below latent downscale {downscale}; latent size floors")
+                print(f"Resolution Selector Plus: multiple {multiple} below latent downscale {downscale}; latent size floors")
                 warned = True
             width, height = parse_resolution_string(label)
             width = max(multiple, ((width + multiple // 2) // multiple) * multiple)
@@ -622,8 +666,8 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ResolutionSelectorPlus": "Resolution Selector Plus (deprecated)",
-    "ResolutionSelectorPlusV2": "Resolution Selector Plus v2",
+    "ResolutionSelectorPlus": "Resolution Selector Plus (Legacy)",
+    "ResolutionSelectorPlusV2": "Resolution Selector Plus",
 }
 
 
@@ -636,17 +680,19 @@ try:
     class ResolutionSelectorPlusV3(io.ComfyNode):
         @classmethod
         def define_schema(cls) -> io.Schema:
-            model_list = ["All"] + list(MODEL_RESOLUTIONS.keys())
+            model_list, model_settings = ResolutionSelector.INPUT_TYPES()["required"]["model"]
+            model_info = model_settings.get("model_info")
             all_resolutions = get_all_resolutions()
             mult = ["1x", "2x", "3x", "4x"]
             return io.Schema(
                 node_id="ResolutionSelectorPlus",
-                display_name="Resolution Selector Plus (deprecated)",
+                display_name="Resolution Selector Plus (Legacy)",
                 is_deprecated=True,
                 category="utils",
-                description="Model-aware resolution presets, custom dimensions, and empty latent output.",
+                description=ResolutionSelector.DESCRIPTION,
                 inputs=[
-                    io.Combo.Input("model", options=model_list, default="SDXL", tooltip=TIP_MODEL),
+                    io.Combo.Input("model", options=model_list, default="SDXL", tooltip=TIP_MODEL,
+                                   extra_dict={"model_info": model_info} if model_info else None),
                     io.Combo.Input("resolution", options=all_resolutions,
                                    default=format_resolution(1024, 1024), tooltip=TIP_RESOLUTION),
                     io.Combo.Input("resolution_multiplier", options=mult, default="1x", tooltip=TIP_MULT),
@@ -683,13 +729,24 @@ try:
                 for name, (choices, settings) in source[group].items():
                     inputs.append(io.Combo.Input(name, options=choices, default=settings["default"],
                                                  display_name=name.replace("_", " ").replace("res", "Res ", 1),
-                                                 optional=group == "optional"))
+                                                 tooltip=settings.get("tooltip"),
+                                                 optional=group == "optional",
+                                                 extra_dict={"model_info": settings["model_info"]} if "model_info" in settings else None))
             outputs = []
-            for name, kind in zip(ResolutionSelectorV2.RETURN_NAMES, ResolutionSelectorV2.RETURN_TYPES):
+            for name, kind, tooltip in zip(ResolutionSelectorV2.RETURN_NAMES,
+                                           ResolutionSelectorV2.RETURN_TYPES,
+                                           ResolutionSelectorV2.OUTPUT_TOOLTIPS):
                 output = io.Latent.Output if kind == "LATENT" else io.Int.Output
-                outputs.append(output(id=name, display_name=name))
-            return io.Schema(node_id="ResolutionSelectorPlusV2", display_name="Resolution Selector Plus v2",
+                outputs.append(output(id=name, display_name=name, tooltip=tooltip))
+            return io.Schema(node_id="ResolutionSelectorPlusV2", display_name="Resolution Selector Plus",
+                             description=ResolutionSelectorV2.DESCRIPTION,
                              category="utils", inputs=inputs, outputs=outputs)
+
+        @classmethod
+        def validate_inputs(cls, res1_aspect_ratio=None, res2_aspect_ratio=None,
+                            res3_aspect_ratio=None, res4_aspect_ratio=None):
+            return ResolutionSelectorV2.VALIDATE_INPUTS(
+                res1_aspect_ratio, res2_aspect_ratio, res3_aspect_ratio, res4_aspect_ratio)
 
         @classmethod
         def execute(cls, res1_model, res1_aspect_ratio, res1_megapixels, res1_resolution, res1_multiple,
