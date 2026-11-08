@@ -18,6 +18,7 @@ function makeNode() {
             widgets.push({ name: `res${slot}_${name}`, value, type: 'combo', options: { values: [] } });
         }
     }
+    widgets.push({ name: 'batch_size', value: 1, type: 'number', options: { min: 1, max: 64 } });
     return {
         constructor: { nodeData: { input: { required: { res1_model: [[], { model_info: modelInfo }] } } } },
         widgets, outputs: [], removed: [], links: new Set(),
@@ -220,14 +221,14 @@ test('onConfigure migrates every released bare ratio', () => {
 test('labels and size follow visible slots', () => {
     const node = makeNode();
     install(node);
-    assert.deepEqual(node.size, [340, 200]);
+    assert.deepEqual(node.size, [340, 210]);
     assert.deepEqual(node.widgets.slice(0, 5).map(item => item.label),
         ['Res 1 model', 'Res 1 aspect ratio', 'Res 1 megapixels', 'Res 1 resolution', 'Res 1 multiple']);
     change(node, 'res2_resolution', getResolutions('1:1', '1.0')[0]);
-    assert.deepEqual(node.size, [340, 250]);
+    assert.deepEqual(node.size, [340, 260]);
     assert.equal(widget(node, 'res4_model').label, 'Res 4 model');
     change(node, 'res2_resolution', 'none');
-    assert.deepEqual(node.size, [340, 200]);
+    assert.deepEqual(node.size, [340, 210]);
 });
 
 test('outputs grow and shrink at the tail', () => {
@@ -368,6 +369,48 @@ test('onConfigure repairs shifted values without losing saved outputs', () => {
     } finally {
         console.warn = previousWarn;
     }
+});
+
+test('old saved widgets keep slot values and default batch without hiding it', () => {
+    const node = makeNode();
+    node.onConfigure = function (saved) {
+        this.widgets.forEach((item, index) => { item.value = saved.widgets_values[index]; });
+    };
+    install(node);
+    const saved = node.widgets.slice(0, -1).map(item => item.value);
+    saved[4] = 16;
+    saved[5] = 'Flux.1';
+    saved[6] = RATIOS[8];
+    saved[9] = 64;
+    const warnings = [];
+    const previousWarn = console.warn;
+    console.warn = (...args) => warnings.push(args);
+    try { node.onConfigure({ widgets_values: saved }); }
+    finally { console.warn = previousWarn; }
+    assert.equal(widget(node, 'res1_multiple').value, 16);
+    assert.equal(widget(node, 'res2_model').value, 'Flux.1');
+    assert.equal(widget(node, 'res2_aspect_ratio').value, RATIOS[8]);
+    assert.equal(widget(node, 'res2_multiple').value, 64);
+    assert.equal(widget(node, 'res2_resolution').value, 'none');
+    assert.deepEqual(warnings, []);
+    assert.equal(widget(node, 'batch_size').value, 1);
+    assert.equal(widget(node, 'batch_size').type, 'number');
+    node._resolutionSelectorV2Refresh();
+    assert.equal(widget(node, 'res3_model').type, 'hidden');
+    assert.equal(widget(node, 'res4_model').type, 'hidden');
+});
+
+test('saved batch size round trips through onConfigure', () => {
+    const node = makeNode();
+    node.onConfigure = function (saved) {
+        this.widgets.forEach((item, index) => { item.value = saved.widgets_values[index]; });
+    };
+    install(node);
+    const saved = node.widgets.map(item => item.value);
+    saved[saved.length - 1] = 4;
+    node.onConfigure({ widgets_values: saved });
+    assert.equal(widget(node, 'batch_size').value, 4);
+    assert.equal(widget(node, 'batch_size').type, 'number');
 });
 
 test('slot 2 model change uses best multiple without changing other slots or saved overrides', () => {

@@ -8,6 +8,7 @@ Custom node for [ComfyUI](https://github.com/comfyanonymous/ComfyUI) providing e
 
 - **Resolution Selector Plus:** pick a named aspect ratio and megapixels, then choose from matching resolutions.
 - **Up to four resolution slots:** each active slot has width, height, and empty latent outputs.
+- **Shared batch size:** one `batch_size` input (1 to 64, default 1) sets the batch of every slot's latent.
 - **Per-slot model and rounding multiple:** choose a discovered ComfyUI image model and pixel multiple independently for each slot.
 - **Optional KJNodes Set nodes:** when [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) is installed, the node can create and sync a Set node for each output, so Get nodes can reach `res1_width`, `res1_latent` and the rest anywhere in the workflow.
 - **Resolution Selector Plus (Legacy):** existing model presets and custom dimensions remain available for saved workflows.
@@ -52,6 +53,7 @@ Resolution labels are compact, for example `1280x704 (16:9)`, with no orientatio
 | `res1_megapixels` through `res4_megapixels` | 0.25, 0.5, 1.0, 1.5, 2.0, 4.0; default 1.0 | Filters each slot's resolution list. |
 | `res1_resolution` through `res4_resolution` | Up to three base candidates near 90%, 100%, and 110% of target area. Each target snaps to 64 pixels; if its result has a different labeled ratio, it retries at 32, 16, then 8 pixels. Duplicate candidates appear once. Slot 1 defaults to the first 1:1, 1.0 MP candidate; later slots default to `none`. | Selects a base resolution. |
 | `res1_multiple` through `res4_multiple` | 8, 16, 32, 64; default 8 | Rounds that slot's width and height to the nearest multiple, with half values rounded up and a minimum of one multiple. |
+| `batch_size` | Integer 1 to 64; default 1 | Sets the batch dimension of every active slot's latent. Width and height outputs stay the same. |
 
 The dropdown reads `comfy.supported_models.models` at startup. A bundled ComfyUI v0.44.0 snapshot supplies choices when ComfyUI cannot be imported. Changing a slot's `resN_model` sets its `resN_multiple` to the best multiple below. You can change it afterward; saved overrides remain on reload. If it is smaller than that model's latent downscale, latent dimensions use integer division and the node logs a note.
 
@@ -118,6 +120,8 @@ Outputs are named `res1_width`, `res1_height`, `res1_latent`, through `res4_late
 
 ### Auto Set nodes (KJNodes)
 
+![Resolution Selector Plus with Auto Set nodes and two Get nodes](set_nodes_preview.png)
+
 Requires [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes). Without it, the menu items below do not appear and the node behaves as before. The setting is off by default.
 
 How Set and Get nodes work: KJNodes Set and Get nodes exist only in the ComfyUI frontend and are not sent to the server. A Set node takes a value and gives it a name. A Get node with the same name outputs that value. When you queue a prompt, each Get node is replaced by a direct link to whatever feeds the matching Set node. Width, height, and latent values therefore reach their targets exactly as if you had drawn the links yourself, with no extra execution step. Set and Get nodes avoid long links across a large workflow.
@@ -139,7 +143,7 @@ Behavior:
 
 ```text
 Resolution Selector Plus (res1_model: SD3, res1_aspect_ratio: "16:9 (Widescreen)", res1_megapixels: 1.0,
-  res1_resolution: "1344x768 (16:9)")
+  res1_resolution: "1344x768 (16:9)", batch_size: 4)
   -> res1_latent -> KSampler
 
 Resolution Selector Plus (res1_model: SDXL, res1_aspect_ratio: "1:1 (Square)", res1_megapixels: 1.0,

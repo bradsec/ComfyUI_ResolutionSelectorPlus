@@ -60,6 +60,10 @@ class TestResolutionSelectorV2(unittest.TestCase):
             start = 0 if slot == 1 else (slot - 2) * 5
             self.assertEqual(list(group)[start:start + 5],
                              [f"res{slot}_{name}" for name in ("model", "aspect_ratio", "megapixels", "resolution", "multiple")])
+        self.assertEqual(list(inputs['optional'])[-1], 'batch_size')
+        self.assertEqual(inputs['optional']['batch_size'], ('INT', {
+            'default': 1, 'min': 1, 'max': 64, 'display_name': 'Batch size',
+            'tooltip': 'Number of latent samples in every slot batch.'}))
         self.assertEqual(len(ResolutionSelectorV2.RETURN_TYPES), 12)
         self.assertEqual(inputs["required"]["res1_megapixels"][1]["default"], "1.0")
         for ratio in inputs["required"]["res1_aspect_ratio"][0]:
@@ -120,6 +124,27 @@ class TestResolutionSelectorV2(unittest.TestCase):
                     expected = expected[:2] + (1,) + expected[2:]
                 self.assertEqual(latent['samples'], expected)
                 self.assertEqual(latent['downscale_ratio_spacial'], downscale)
+
+    def test_shared_batch_size_for_4d_and_5d_slots(self):
+        test_resolution_selector.MockTorch.zeros = staticmethod(lambda shape, **kwargs: tuple(shape))
+        label = get_v2_resolutions('1:1', '1.0')[0]
+        for model in ('SDXL', 'Qwen-Image'):
+            with self.subTest(model=model):
+                result = ResolutionSelectorV2().select_resolutions(
+                    model, '1:1', '1.0', label, 8,
+                    res2_model=model, res3_model=model, res4_model=model,
+                    res2_resolution=label, res3_resolution=label, res4_resolution=label,
+                    batch_size=3)
+                for slot in range(4):
+                    self.assertEqual(result[slot * 3 + 2]['samples'][0], 3)
+                self.assertEqual(len(result[2]['samples']), 5 if model == 'Qwen-Image' else 4)
+                self.assertEqual(result[0:2], result[3:5])
+                self.assertEqual(ResolutionSelectorV2().select_resolutions(
+                    model, '1:1', '1.0', label, 8)[2]['samples'][0], 1)
+        for size in (0, 65):
+            with self.assertRaises(ValueError):
+                ResolutionSelectorV2().select_resolutions('SDXL', '1:1', '1.0', label, 8,
+                                                         batch_size=size)
 
     def test_slots_use_independent_models_and_multiples(self):
         test_resolution_selector.MockTorch.zeros = staticmethod(lambda shape, **kwargs: tuple(shape))
@@ -236,13 +261,15 @@ class TestResolutionSelectorV2(unittest.TestCase):
         spec = inspect.getfullargspec(ResolutionSelectorV2.VALIDATE_INPUTS)
         self.assertIsNone(spec.varkw)  # **kwargs would skip the combo check for every input
         self.assertEqual([n for n in spec.args if n != 'cls'],
-                         [f'res{slot}_aspect_ratio' for slot in range(1, 5)])
+                         [f'res{slot}_aspect_ratio' for slot in range(1, 5)] + ['batch_size'])
         validate = ResolutionSelectorV2.VALIDATE_INPUTS
         self.assertIs(validate(res1_aspect_ratio='16:9'), True)
         self.assertIs(validate(res1_aspect_ratio='16:9 (Widescreen)', res3_aspect_ratio='1:3'), True)
         self.assertIs(validate(), True)
         self.assertIsInstance(validate(res2_aspect_ratio='7:5'), str)
         self.assertIsInstance(validate(res1_aspect_ratio='16:9 (Wrong)'), str)
+        self.assertIs(validate(batch_size=64), True)
+        self.assertIsInstance(validate(batch_size=0), str)
 
     def test_legacy_lists_only_presets_valid_for_discovered_models(self):
         from nodes import ResolutionSelector, V2_MODELS, LEGACY_EQUIVALENTS, get_resolution_list, get_all_resolutions
@@ -289,6 +316,9 @@ class TestResolutionSelectorV2(unittest.TestCase):
         self.assertEqual([item.name for item in schema.inputs],
                          list(module.ResolutionSelectorV2.INPUT_TYPES()['required']) +
                          list(module.ResolutionSelectorV2.INPUT_TYPES()['optional']))
+        self.assertEqual(schema.inputs[-1].name, 'batch_size')
+        self.assertEqual(schema.inputs[-1].display_name, 'Batch size')
+        self.assertEqual(schema.inputs[-1].default, 1)
         self.assertEqual([item.display_name for item in schema.inputs[:5]],
                          ['Res 1 model', 'Res 1 aspect ratio', 'Res 1 megapixels', 'Res 1 resolution', 'Res 1 multiple'])
         old = module.ResolutionSelectorPlusV3.define_schema()
@@ -304,6 +334,12 @@ class TestResolutionSelectorV2(unittest.TestCase):
         self.assertEqual(module.ResolutionSelector.RETURN_TYPES, ('INT', 'INT', 'LATENT') * 2)
         self.assertIs(module.NODE_CLASS_MAPPINGS['ResolutionSelectorPlus'], module.ResolutionSelector)
         self.assertIs(module.NODE_CLASS_MAPPINGS['ResolutionSelectorPlusV2'], module.ResolutionSelectorV2)
+        label = module.get_v2_resolutions('1:1', '1.0')[0]
+        self.assertEqual(module.ResolutionSelectorPlusV2V3.execute(
+            'SDXL', '1:1', '1.0', label, 8, batch_size=3)[2]['samples'][0], 3)
+        self.assertEqual(module.ResolutionSelectorPlusV2V3.execute(
+            'SDXL', '1:1', '1.0', label, 8)[2]['samples'][0], 1)
+        self.assertIsInstance(module.ResolutionSelectorPlusV2V3.validate_inputs(batch_size=0), str)
 
 
 

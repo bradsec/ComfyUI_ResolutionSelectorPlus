@@ -579,12 +579,14 @@ class ResolutionSelectorV2(ResolutionSelector):
     DESCRIPTION = "Resolution Selector Plus: choose a discovered image model, named aspect ratio, megapixels and rounding multiple for up to four latent outputs."
     @classmethod
     def VALIDATE_INPUTS(cls, res1_aspect_ratio=None, res2_aspect_ratio=None,
-                        res3_aspect_ratio=None, res4_aspect_ratio=None):
+                        res3_aspect_ratio=None, res4_aspect_ratio=None, batch_size=1):
         # ComfyUI skips the combo check for inputs named here, so v2.2.0 API
         # prompts with bare ratios ("16:9") validate. Other inputs keep the check.
         for ratio in (res1_aspect_ratio, res2_aspect_ratio, res3_aspect_ratio, res4_aspect_ratio):
             if ratio is not None and ratio not in V2_RATIOS and ratio not in V2_RATIO_BY_BARE:
                 return f"Unsupported aspect ratio: {ratio!r}"
+        if type(batch_size) is not int or not 1 <= batch_size <= 64:
+            return "Batch size must be an integer from 1 to 64"
         return True
 
     @classmethod
@@ -609,6 +611,9 @@ class ResolutionSelectorV2(ResolutionSelector):
                                                 "tooltip": "Select a resolution; later slots use none until activated."})
             target[f"res{slot}_multiple"] = (list(V2_MULTIPLES), {"default": V2_MODELS["SDXL"][2],
                                               "tooltip": "Pixel rounding step. Model selection suggests its best multiple; you may override it."})
+        optional["batch_size"] = ("INT", {"default": 1, "min": 1, "max": 64,
+                                          "display_name": "Batch size",
+                                          "tooltip": "Number of latent samples in every slot batch."})
         return {"required": required, "optional": optional}
 
     RETURN_TYPES = ("INT", "INT", "LATENT") * 4
@@ -622,7 +627,10 @@ class ResolutionSelectorV2(ResolutionSelector):
     def select_resolutions(self, res1_model, res1_aspect_ratio, res1_megapixels, res1_resolution, res1_multiple,
                            res2_model=None, res2_aspect_ratio="1:1", res2_megapixels="1.0", res2_resolution="none", res2_multiple=8,
                            res3_model=None, res3_aspect_ratio="1:1", res3_megapixels="1.0", res3_resolution="none", res3_multiple=8,
-                           res4_model=None, res4_aspect_ratio="1:1", res4_megapixels="1.0", res4_resolution="none", res4_multiple=8):
+                           res4_model=None, res4_aspect_ratio="1:1", res4_megapixels="1.0", res4_resolution="none", res4_multiple=8,
+                           batch_size=1):
+        if type(batch_size) is not int or not 1 <= batch_size <= 64:
+            raise ValueError("Batch size must be an integer from 1 to 64")
         slots = ((res1_model, res1_aspect_ratio, res1_megapixels, res1_resolution, res1_multiple),
                  (res2_model, res2_aspect_ratio, res2_megapixels, res2_resolution, res2_multiple),
                  (res3_model, res3_aspect_ratio, res3_megapixels, res3_resolution, res3_multiple),
@@ -647,7 +655,7 @@ class ResolutionSelectorV2(ResolutionSelector):
             width, height = parse_resolution_string(label)
             width = max(multiple, ((width + multiple // 2) // multiple) * multiple)
             height = max(multiple, ((height + multiple // 2) // multiple) * multiple)
-            shape = [1, channels, height // downscale, width // downscale]
+            shape = [batch_size, channels, height // downscale, width // downscale]
             if rank == 5:
                 shape.insert(2, 1)
             kwargs = {"device": self.device}
@@ -727,11 +735,17 @@ try:
             inputs = []
             for group in ("required", "optional"):
                 for name, (choices, settings) in source[group].items():
-                    inputs.append(io.Combo.Input(name, options=choices, default=settings["default"],
-                                                 display_name=name.replace("_", " ").replace("res", "Res ", 1),
-                                                 tooltip=settings.get("tooltip"),
-                                                 optional=group == "optional",
-                                                 extra_dict={"model_info": settings["model_info"]} if "model_info" in settings else None))
+                    if choices == "INT":
+                        inputs.append(io.Int.Input(name, default=settings["default"],
+                                                   min=settings["min"], max=settings["max"],
+                                                   display_name=settings["display_name"],
+                                                   tooltip=settings["tooltip"], optional=True))
+                    else:
+                        inputs.append(io.Combo.Input(name, options=choices, default=settings["default"],
+                                                     display_name=name.replace("_", " ").replace("res", "Res ", 1),
+                                                     tooltip=settings.get("tooltip"),
+                                                     optional=group == "optional",
+                                                     extra_dict={"model_info": settings["model_info"]} if "model_info" in settings else None))
             outputs = []
             for name, kind, tooltip in zip(ResolutionSelectorV2.RETURN_NAMES,
                                            ResolutionSelectorV2.RETURN_TYPES,
@@ -744,9 +758,9 @@ try:
 
         @classmethod
         def validate_inputs(cls, res1_aspect_ratio=None, res2_aspect_ratio=None,
-                            res3_aspect_ratio=None, res4_aspect_ratio=None):
+                            res3_aspect_ratio=None, res4_aspect_ratio=None, batch_size=1):
             return ResolutionSelectorV2.VALIDATE_INPUTS(
-                res1_aspect_ratio, res2_aspect_ratio, res3_aspect_ratio, res4_aspect_ratio)
+                res1_aspect_ratio, res2_aspect_ratio, res3_aspect_ratio, res4_aspect_ratio, batch_size)
 
         @classmethod
         def execute(cls, res1_model, res1_aspect_ratio, res1_megapixels, res1_resolution, res1_multiple,

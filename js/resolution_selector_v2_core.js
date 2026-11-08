@@ -176,6 +176,8 @@ export function install(node) {
     node.onConfigure = function (...args) {
         const result = previousConfigure?.apply(this, args);
         this._resolutionSelectorV2DeferMissingSetNodes = true;
+        const batch = widget('batch_size');
+        if (batch && batch.value == null) batch.value = 1;
         for (let slot = 1; slot <= 4; slot++) {
             const ratio = widget(`res${slot}_aspect_ratio`);
             const index = BARE_RATIOS.indexOf(ratio?.value);
